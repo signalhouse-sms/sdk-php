@@ -1,0 +1,910 @@
+================================================================================
+                    SIGNALHOUSE PHP SDK DOCUMENTATION
+================================================================================
+
+INSTALLATION
+--------------------------------------------------------------------------------
+  composer require signalhouse-sms/sdk
+
+
+INITIALIZATION
+--------------------------------------------------------------------------------
+  use SignalHouse\SDK\SignalHouseSDK;
+
+  $signalHouse = new SignalHouseSDK(
+      apiKey: 'your-api-token',
+      baseUrl: 'https://v2.signalhouse.io'
+  );
+
+  Required options:
+    - apiKey   (string)  JWT token or service user token for authentication
+    - baseUrl  (string)  API base URL
+
+  The SDK throws an InvalidArgumentException at initialization if apiKey or
+  baseUrl is missing.
+
+
+PER-REQUEST TOKEN OVERRIDE
+--------------------------------------------------------------------------------
+  Every SDK method accepts an optional $options array with a 'token' key to
+  override the default apiKey for that single request.
+
+  Example:
+    $response = $signalHouse->messages->getMessages(
+        page: 1,
+        limit: 10,
+        options: ['token' => 'user-specific-jwt-token']
+    );
+
+  The per-request token takes precedence over the apiKey provided at
+  initialization. The original apiKey remains unchanged.
+
+
+CUSTOM HEADERS
+--------------------------------------------------------------------------------
+  Pass additional headers via the options['headers'] key:
+
+  Example:
+    $response = $signalHouse->numbers->getPhoneNumbers(
+        page: 1,
+        limit: 20,
+        options: [
+            'headers' => [
+                'X-Request-Id' => 'req_abc123',
+            ],
+        ]
+    );
+
+
+IDEMPOTENT REQUESTS
+--------------------------------------------------------------------------------
+  Pass options['idempotencyKey'] to make a create, update or delete safe to
+  retry. The SDK sends it as the Idempotency-Key header. A retry with the same
+  key and the same request replays the first response, marked with the
+  response header Idempotent-Replayed: true, instead of running the request
+  again.
+
+  - Use a new key (a UUID is recommended) for each new operation, and reuse
+    it only to retry that exact request.
+  - Keys are scoped to the authenticated user and kept for 24 hours.
+  - Reusing a key for a different request returns 422; retrying while the
+    first request is still running returns 409 with Retry-After.
+  - The SDK never creates a key for you. GET requests ignore it, and the
+    Voice service does not support it.
+
+  Example:
+    $response = $signalHouse->subgroups->createSubgroup(
+        ['groupId' => 'G0000001', 'subgroupName' => 'Support'],
+        ['idempotencyKey' => '6f1c2a4e-8b3d-4c5e-9f70-1a2b3c4d5e6f']
+    );
+
+
+================================================================================
+                          DOMAIN METHOD REFERENCE
+================================================================================
+
+AUTH  ($signalHouse->auth)
+--------------------------------------------------------------------------------
+  login(string $email, string $password, ?array $options)
+    Login with email and password.
+
+  resetPassword(string $userId, string $newPassword, ?array $options)
+    Reset a user's password.
+
+  getAuthHistory(?string $groupId, ?string $userId, ?int $page,
+      ?int $limit, ?array $options)
+    Get token login history.
+
+
+BILLING  ($signalHouse->billing)
+--------------------------------------------------------------------------------
+  getTransactionHistory(?string $groupId, ?string $subgroupId,
+      ?string $brandId, ?string $campaignId, ?string $entryType,
+      ?string $transactionType, ?string $startDate, ?string $endDate,
+      ?array $options)
+    Get transaction history with filters.
+
+  getWallet(?string $groupId, ?array $options)
+    Get wallet balance and settings.
+
+  updateWallet(string $groupId, ?bool $autoRechargeEnabled,
+      ?int $autoRechargeThreshold, ?int $autoRechargeToAmount,
+      ?string $primaryPaymentMethodId, ?string $secondaryPaymentMethodId,
+      ?array $options)
+    Update wallet auto-recharge settings.
+
+  getPaymentMethods(?string $groupId, ?array $options)
+    List saved payment methods.
+
+  addFunds(string $groupId, int $amount, string $paymentMethodId,
+      ?array $options)
+    Add funds to wallet. Amount is in microdollars (1,000,000 = $1.00).
+
+  addPaymentMethod(string $groupId, string $paymentMethodId,
+      ?array $options)
+    Save a new payment method.
+
+  removePaymentMethod(string $groupId, string $paymentMethodId,
+      ?array $options)
+    Remove a saved payment method.
+
+  getInvoiceDetails(?string $groupId, ?string $subgroupId,
+      ?string $startDate, ?string $endDate, ?array $options)
+    Get invoice/billing details.
+
+  getFees(?string $groupId, ?array $options)
+    Get fee schedule for the group.
+
+
+BRANDS  ($signalHouse->brands)
+--------------------------------------------------------------------------------
+  getBrands(array $params = [], array $options = [])
+    List brands with filters. $params keys: id, subgroupId, groupId, page,
+    limit, status, registrationType, currentTollFreeCarrier (bool).
+    id is a brand lookup id. registrationType filters by "TEN_DLC",
+    "TOLL_FREE", or "SHORT_CODE".
+    currentTollFreeCarrier: with groupId or subgroupId, true returns only the
+    toll-free brands a new toll-free campaign in that group can use.
+
+  createBrand(array $brandData, ?array $options)
+    Create a new 10DLC brand.
+
+  getBusinessVerification(string $groupId, ?array $options,
+      ?string $subgroupId)
+    Get a group's business verification: whether its toll-free brands need
+    one, its status and the submitted details.
+    Sends a GET to /brand/business-verification/:groupId, adding
+    ?subgroupId= only when $subgroupId is given.
+    Returns 200: { groupId, subgroupId, required, status, details,
+    submittedAt, reviewedAt, rejectionReason }. subgroupId is present only
+    when the verification belongs to one subgroup. required says whether the
+    group's new toll-free brands need one; status is NOT_STARTED,
+    SUBMITTING, IN_REVIEW, VERIFIED or NEEDS_CHANGES; rejectionReason says
+    why it needs changes, or is null.
+    Some groups verify each subgroup's business separately: a platform whose
+    subgroups are separate businesses, set up by Signal House. For those
+    groups $subgroupId is required (400 without it). Any other group has one
+    business verification for all its subgroups, so a $subgroupId is only
+    checked to be in the group. 404 when the subgroup isn't in the group.
+    Pass it by name:
+      $signalHouse->brands->getBusinessVerification('G1', subgroupId: 'S1234567');
+
+  submitBusinessVerification(string $groupId, array $details,
+      ?array $options, ?string $subgroupId)
+    Submit or update a group's business verification. Allowed when it is not
+    started or needs changes. Review usually takes 1–2 business days; the
+    group's toll-free brands stay pending until it is verified.
+    Sends a PUT to /brand/business-verification/:groupId with $details as the
+    body, adding ?subgroupId= only when $subgroupId is given. $groupId must
+    be the caller's active group.
+    $details keys: businessName, businessType, industry, registrationType,
+    registrationNumber, website, street, street2 (optional), city, state,
+    postalCode, country ("US" or "CA") and representative (firstName,
+    lastName, email, phone in E.164, jobTitle, jobLevel).
+    A group that verifies each subgroup's business separately (see
+    getBusinessVerification) must pass $subgroupId (400 without it), and
+    only that subgroup's toll-free brands follow the verification. 404 when
+    the subgroup isn't in the group; 400 when it isn't active.
+    Returns 202 with the getBusinessVerification shape (status SUBMITTING).
+
+  updateBrand(string $brandId, array $brandData, ?array $options)
+    Update brand information.
+
+  deleteBrand(string $brandId, ?array $options)
+    Delete (soft) a brand.
+
+  transferBrand(string $subgroupId, array $brandIds, ?array $options)
+    Transfer brands to a different subgroup.
+
+  getExternalVetting(string $brandId, ?array $options)
+    Get external vetting info for a brand.
+
+  createExternalVetting(string $brandId, ?array $options)
+    Submit brand for external vetting.
+
+  importExternalVetting(string $brandId, string $vettingProviderId, string $vettingId, ?string $vettingToken, ?array $options)
+    Import an existing external vetting record (not billable).
+
+  revetBrand(string $brandId, ?array $options)
+    Resubmit brand for vetting.
+
+  getAppealHistory(string $brandId, ?array $options)
+    List identity status appeals for a brand.
+
+  submitAppeal(string $brandId, array $appealCategories, string $explanation,
+      ?string $filePath, ?array $options)
+    Submit a brand identity status appeal with supporting documentation.
+    Uses multipart/form-data automatically.
+    $appealCategories: array of strings (VERIFY_TAX_ID, VERIFY_NON_PROFIT, VERIFY_GOVERNMENT)
+    $explanation: string (max 1024 chars)
+    $filePath: string path to file (supported: .jpg, .jpeg, .png, .bmp, .raw, .tiff, .pdf, .docx, .htm, .odt, .rtf, .txt, .xml)
+
+
+CAMPAIGNS  ($signalHouse->campaigns)
+--------------------------------------------------------------------------------
+  getCampaigns(?string $id, ?string $brandId, ?string $subgroupId,
+      ?string $groupId, ?int $page, ?int $limit, ?string $status,
+      ?array $options)
+    List campaigns with filters.
+
+  createCampaign(array $campaignData, ?array $options)
+    Create a new 10DLC campaign.
+
+  updateCampaign(string $campaignId, array $campaignData, ?array $options)
+    Update campaign details.
+
+  deleteCampaign(string $campaignId, ?array $options)
+    Delete (soft) a campaign.
+
+  appealDcaRejection(string $campaignId, string $reason, ?array $options)
+    Appeal a DCA-rejected campaign. The campaign must be in DCA_REJECTED status.
+    Sends a POST to /campaign/appealDcaRejection/:campaignId.
+    $reason: string (max 2048 chars)
+    Returns 202: { Message: "Campaign DCA appeal has been queued for processing" }
+
+  nudgeDcaForCampaign(string $campaignId, ?array $options)
+    Nudge a connectivity partner to prioritize review of a campaign in PENDING_DCA_APPROVAL status.
+    Sends a POST to /campaign/nudge/:campaignId.
+    No request body required.
+    Returns 200: { message: "Nudge successful" }
+
+
+GROUPS  ($signalHouse->groups)
+--------------------------------------------------------------------------------
+  getGroup(?string $id, ?array $options)
+    Get group details by ID.
+
+  updateGroup(string $id, array $groupData, ?array $options)
+    Update group information.
+
+
+LANDINGS  ($signalHouse->landings)
+--------------------------------------------------------------------------------
+  getLandings(?string $landingId, ?array $options)
+    Get a landing page by ID.
+
+  getLandingByBrandId(string $brandId, ?array $options)
+    Get landing page associated with a brand.
+
+  createLanding(array $landingData, ?string $filePath, ?array $options)
+    Create a landing page with optional image upload.
+    Uses multipart/form-data automatically.
+
+  updateLanding(string $landingId, array $landingData, ?string $filePath,
+      ?array $options)
+    Update a landing page with optional image upload.
+    Uses multipart/form-data automatically.
+
+  deleteLanding(string $landingId, ?array $options)
+    Delete a landing page.
+
+
+MESSAGES  ($signalHouse->messages)
+--------------------------------------------------------------------------------
+  getMessages(?string $id, ?string $campaignId, ?string $brandId,
+      ?string $subgroupId, ?string $groupId, ?string $status,
+      ?string $direction, ?string $messageType, ?string $carrier,
+      ?string $sentimentLabel, ?string $errorCode,
+      ?string $startDate, ?string $endDate, ?string $sortField,
+      ?string $sortOrder, ?int $page, ?int $limit, ?array $options)
+    List messages with extensive filters.
+
+  getAnalytics(?string $groupId, ?string $subgroupId, ?string $brandId,
+      ?string $campaignId, string|array|null $registrationId,
+      ?string $phoneNumber, ?string $carrier,
+      ?string $startDate, ?string $endDate, ?array $options)
+    Get aggregated message analytics.
+
+  sendSMS(string $senderPhoneNumber, array $recipientPhoneNumbers,
+      string $messageBody, ?string $statusCallbackUrl,
+      ?bool $enableShortlink, ?array $options)
+    Send an SMS message.
+    Required: $senderPhoneNumber, $recipientPhoneNumbers, $messageBody
+
+  sendMMS(string $senderPhoneNumber, array $recipientPhoneNumbers,
+      string $messageBody, ?array $mediaUrls, ?string $statusCallbackUrl,
+      ?bool $enableShortlink, ?bool $enableCompression, ?array $images,
+      ?array $options)
+    Send an MMS message with media attachments.
+    Uses multipart/form-data automatically.
+    Required: $senderPhoneNumber, $recipientPhoneNumbers, $messageBody
+
+  sendGroupMessage(string $senderPhoneNumber, array $recipientPhoneNumbers,
+      string $messageBody, ?array $mediaUrls, ?string $statusCallbackUrl,
+      ?bool $enableShortlink, ?bool $enableCompression, ?array $images,
+      ?array $options)
+    Send a group MMS message.
+    Uses multipart/form-data automatically.
+    Required: $senderPhoneNumber, $recipientPhoneNumbers, $messageBody
+
+  carrierIdLookup(string $phoneNumber, array $options = [])
+    Look up the carrier for a phone number.
+    Always performs a fresh lookup (not cached). Billed per request.
+    Required: $phoneNumber (10+ digits, no + prefix)
+    Returns: { phoneNumber, carrier, carrierFamily, carrierRegion, ported, type, degradedConfidence, cost }
+
+
+NOTIFICATIONS  ($signalHouse->notifications)
+--------------------------------------------------------------------------------
+  getNotifications(?string $id, ?string $groupId, ?int $page, ?int $limit,
+      ?string $status, ?array $eventTypes, ?array $options)
+    Get notifications with filters.
+
+  updateNotificationStatus(array $ids, string $status, ?array $options)
+    Mark notifications as READ or UNREAD.
+
+  deleteNotification(string $id, ?array $options)
+    Delete a notification.
+
+
+NUMBERS  ($signalHouse->numbers)
+--------------------------------------------------------------------------------
+  getPhoneNumbers(array $params = [], array $options = [])
+    List your phone numbers with filters. $params keys: phoneNumber,
+    campaignId, registrationId, brandId, subgroupId, groupId, page, limit,
+    currentTollFreeCarrier (bool).
+    registrationId: filter to numbers provisioned under this registration.
+    currentTollFreeCarrier: with groupId or subgroupId, true returns only the
+    toll-free numbers a new toll-free campaign in that group can use.
+
+  getNumberHealth(string $phoneNumber, ?array $options)
+    Get the health score, the same one the portal shows, (1–10) for an owned phone number.
+    Returns sevenDay and thirtyDay breakdowns matching the portal.
+
+  getAvailablePhoneNumbers(?bool $smsEnabled, ?bool $mmsEnabled,
+      ?bool $voiceEnabled, ?string $country, ?string $state,
+      ?string $npa, ?string $nxx, ?string $phoneNumber,
+      ?int $limit, ?int $page, ?array $options)
+    Search available numbers for purchase.
+
+  purchasePhoneNumber(array $phoneNumbers, string $subgroupId,
+      ?array $options)
+    Purchase one or more phone numbers.
+
+  updatePhoneNumber(string $phoneNumber, array $updateData,
+      ?array $options)
+    Update phone number details (e.g., friendly name).
+
+  getCallerName(string $phoneNumber, ?array $options)
+    Get the number's outbound caller name (GET /number/:phoneNumber/cnam).
+    Returns { phoneNumber, cnam, autoApply, eligible, ineligibleReason }.
+
+  setCallerName(string $phoneNumber, string $name, ?string $brandId = null,
+      ?array $options)
+    Set the number's outbound caller name (PUT /number/:phoneNumber/cnam).
+    $brandId only for numbers with no campaign; sent only when provided.
+
+  deleteCallerName(string $phoneNumber, ?array $options)
+    Remove the number's own caller name (DELETE /number/:phoneNumber/cnam);
+    falls back to the auto-applied name if the subgroup has auto-apply on.
+
+  assignPhoneNumberToCampaign(string $campaignId, array $phoneNumbers,
+      ?array $options)
+    Assign numbers to a campaign.
+
+  unassignPhoneNumbersFromCampaigns(array $phoneNumbers, ?array $options)
+    Unassign numbers from their campaigns.
+
+  deletePhoneNumbers(array $phoneNumbers, ?array $options)
+    Release phone numbers.
+
+  transferPhoneNumbers(array $phoneNumbers, string $newSubgroupId,
+      ?array $options)
+    Transfer unassigned numbers between subgroups.
+
+  searchNpaNxx(?string $country, ?string $state, ?string $city,
+      ?string $npa, ?string $nxx, ?array $options)
+    Search NPA/NXX area code lookup data.
+
+  lookupLocations(array $entries, ?array $options)
+    Batch lookup city/state for NPA/NXX pairs.
+    $entries: [['npa' => '213', 'nxx' => '555'], ...]
+
+  portInPhoneNumber(array $numberData, array $options = [])
+    Submit a port-in request (POST /number/portin).
+    $numberData: array containing port-in request data (required).
+
+  getPortRequests(?string $groupId, ?string $phoneNumber, ?string $status,
+      ?int $page, ?int $limit, array $options = [], ?bool $excludeDocuments = null)
+    Get port-in requests with optional filters (GET /number/portin).
+    All parameters are optional. $excludeDocuments = true leaves signatureUrl
+    and billingUrl out of each request.
+
+
+SHORTLINKS  ($signalHouse->shortlinks)
+--------------------------------------------------------------------------------
+  getShortlink(?string $shortlinkId, ?string $messageId,
+      ?string $phoneNumber, ?string $campaignId, ?string $brandId,
+      ?string $subgroupId, ?string $groupId, ?int $page, ?int $limit,
+      ?array $options)
+    Get shortlink details and click data.
+
+  getShortlinkRedirect(string $shortlinkId, ?array $options)
+    Get the redirect URL for a shortlink.
+
+  getOptOut(string $code, ?array $options)
+    Public, no auth. GET /shortlink/optout/:code for the alphanumeric-sender
+    opt-out link (sihou.io/o/{code}): { code, senderName, maskedRecipient,
+    optedOut }; 404 for an unknown code.
+
+  confirmOptOut(string $code, ?array $options)
+    Public, no auth. POST /shortlink/optout/:code (no body) opts the recipient
+    out; idempotent. Returns { code, senderName, maskedRecipient, optedOut: true };
+    404 for an unknown code.
+
+
+SUBGROUPS  ($signalHouse->subgroups)
+--------------------------------------------------------------------------------
+  getSubgroups(?string $id, ?string $groupId, ?int $page, ?int $limit,
+      ?array $options)
+    List subgroups with filters.
+
+  createSubgroup(array $subgroupData, ?array $options)
+    Create a new subgroup.
+    $subgroupData may include optional carrierIdFamily and carrierIdRegion.
+    Setting carrierIdFamily or carrierIdRegion requires signalhouse_api,
+    signalhouse_admin, signalhouse_user, api, admin, developer, or billing role.
+
+  updateSubgroup(string $id, array $updateData, ?array $options)
+    Update subgroup details.
+    $updateData may include optional carrierIdFamily and carrierIdRegion.
+    Setting carrierIdFamily or carrierIdRegion requires signalhouse_api,
+    signalhouse_admin, signalhouse_user, api, admin, developer, or billing role.
+    $updateData may also include cnamAutoApply (bool) and cnamBrandId (string
+    or null) for caller name auto-apply. Setting them requires signalhouse_api,
+    signalhouse_admin, signalhouse_user, api, admin, or developer role.
+
+  deleteSubgroup(string $id, ?array $options)
+    Delete (deactivate) a subgroup.
+
+
+SUBSCRIPTIONS  ($signalHouse->subscriptions)
+--------------------------------------------------------------------------------
+  getSubscriptions(?string $groupId, ?bool $onlyActive, ?array $options)
+    Get subscription history for a group.
+
+  subscribe(string $groupId, string $templateId, ?array $options)
+    Subscribe a group to a plan.
+
+  unsubscribe(string $groupId, ?array $options)
+    Unsubscribe a group from their current plan.
+
+
+USERS  ($signalHouse->users)
+--------------------------------------------------------------------------------
+  getUsers(?string $id, ?string $groupId, ?string $userType,
+      ?array $options)
+    List users with filters.
+
+  createUser(array $data, ?array $options)
+    Create a new user.
+
+  createServiceUser(array $data, ?array $options)
+    Create a service user (API key). Optional allowedIps (IPs/CIDRs) and
+    allowedCountries (ISO 3166-1 alpha-2) restrict where a customer key is accepted from.
+    allowedDestinationCountries (ISO 3166-1 alpha-2) limits the countries it can send
+    messages to; a send to any other country is rejected with 403 DESTINATION_COUNTRY_NOT_ALLOWED.
+
+  updateUser(string $id, array $data, ?array $options)
+    Update user information. For a customer API key, allowedIps / allowedCountries /
+    allowedDestinationCountries replace its restrictions ([] removes one); needs an interactive admin/developer session.
+
+  deleteUser(string $id, ?array $options)
+    Delete (deactivate) a user.
+
+  getNotificationPreferences(string $id, ?array $options)
+    Get user notification preferences.
+
+  updateNotificationPreferences(string $id,
+      array $notificationPreferences, ?array $options)
+    Update notification preferences.
+
+
+WEBHOOKS  ($signalHouse->webhooks)
+--------------------------------------------------------------------------------
+  getWebhooks(?string $id, ?string $groupId, ?string $endpointType,
+      ?string $phoneNumber, ?int $page, ?int $limit, ?array $options)
+    List webhooks with filters.
+
+  createWebhook(array $webhookData, ?array $options)
+    Create a new webhook.
+
+  updateWebhook(string $id, array $updateData, ?array $options)
+    Update webhook configuration, including authType, apiHeaderPrefix and credentials
+    (changed in place). Responses carry hasSigningSecret/hasCredentials, never secrets.
+
+  rotateWebhookSecret(string $id, ?int $graceSeconds, ?array $options)
+    Rotate the signing secret (or create a first one for an older webhook). Returns the new
+    signingSecret once; the old secret keeps working for graceSeconds (default 24h, max 7 days).
+
+  deleteWebhook(string $id, ?array $options)
+    Delete a webhook.
+
+
+================================================================================
+                          MULTIPART REQUESTS
+================================================================================
+
+  The following methods use multipart/form-data automatically:
+
+    - $signalHouse->messages->sendMMS(...)
+    - $signalHouse->messages->sendGroupMessage(...)
+    - $signalHouse->landings->createLanding(...)
+    - $signalHouse->landings->updateLanding(...)
+    - $signalHouse->brands->submitAppeal(...)
+
+  You do not need to construct multipart form data manually. Pass parameters
+  as normal arguments and the SDK builds the form data internally using
+  Guzzle's multipart support.
+
+
+================================================================================
+                          QUERY STRING HELPERS
+================================================================================
+
+  The SDK automatically constructs query strings from method parameters.
+  Any parameter with a null value is excluded, so you only need to pass
+  the filters you care about.
+
+  Example:
+    // Only sends ?status=FAILED&page=1&limit=50
+    $messages = $signalHouse->messages->getMessages(
+        status: 'FAILED',
+        groupId: null,     // excluded
+        direction: null,   // excluded
+        page: 1,
+        limit: 50
+    );
+
+
+================================================================================
+                             VALIDATION
+================================================================================
+
+  The SDK validates required parameters client-side before making any HTTP
+  request. If a required parameter is missing, null, or an empty string,
+  the SDK throws a ValidationException immediately -- no network request
+  is made.
+
+  Validation errors have:
+    - Class:   SignalHouse\SDK\Exceptions\ValidationException
+    - Message: "Missing required parameter: <fieldName>"
+    - Code:    400
+
+
+================================================================================
+                           ERROR HANDLING
+================================================================================
+
+  The SDK uses a standardized response format. Errors are NOT thrown --
+  they are returned as associative arrays with 'success' => false.
+
+  Success response:
+    ['success' => true, 'data' => [...], 'status' => 200]
+
+  Error response:
+    ['success' => false, 'error' => 'Error message', 'status' => 400]
+
+  Error types summary:
+
+    Source                    Behavior                         How to Handle
+    -----------------------------------------------------------------------
+    Missing required param    Throws ValidationException       try/catch
+    HTTP 4xx/5xx from API     Returns ['success' => false]     Check $response['success']
+    Network failure           Returns ['success' => false]     Check $response['success']
+
+
+================================================================================
+                       COMPLETE INTEGRATION EXAMPLE
+================================================================================
+
+  <?php
+
+  require __DIR__ . '/vendor/autoload.php';
+
+  use SignalHouse\SDK\SignalHouseSDK;
+  use SignalHouse\SDK\Exceptions\ValidationException;
+
+  // --- Laravel example ---
+
+  // In a service provider or controller constructor:
+  $signalHouse = new SignalHouseSDK(
+      apiKey: env('SIGNALHOUSE_API_KEY'),
+      baseUrl: 'https://v2.signalhouse.io'
+  );
+
+  // routes/api.php
+  use Illuminate\Http\Request;
+  use Illuminate\Support\Facades\Route;
+
+  Route::post('/api/notify', function (Request $request) use ($signalHouse) {
+      $validated = $request->validate([
+          'recipientNumber' => 'required|string',
+          'message'         => 'required|string',
+          'senderNumber'    => 'required|string',
+      ]);
+
+      try {
+          $response = $signalHouse->messages->sendSMS(
+              senderPhoneNumber: $validated['senderNumber'],
+              recipientPhoneNumbers: [$validated['recipientNumber']],
+              messageBody: $validated['message'],
+              statusCallbackUrl: config('app.url') . '/api/delivery-status'
+          );
+
+          if (!$response['success']) {
+              return response()->json(
+                  ['error' => $response['error']],
+                  $response['status'] ?? 500
+              );
+          }
+
+          return response()->json([
+              'messageId' => $response['data']['messageId'],
+              'status'    => $response['data']['status'],
+          ]);
+      } catch (ValidationException $e) {
+          return response()->json(['error' => $e->getMessage()], 400);
+      } catch (\Exception $e) {
+          return response()->json(['error' => 'Internal server error'], 500);
+      }
+  });
+
+  // Receive delivery status callbacks
+  Route::post('/api/delivery-status', function (Request $request) {
+      $messageId = $request->input('messageId');
+      $status = $request->input('status');
+      \Log::info("Message {$messageId} status: {$status}");
+      return response()->json(['received' => true]);
+  });
+
+  // List phone numbers with per-request token override
+  Route::get('/api/numbers', function (Request $request) use ($signalHouse) {
+      $userToken = str_replace('Bearer ', '', $request->header('Authorization', ''));
+
+      $response = $signalHouse->numbers->getPhoneNumbers(
+          page: (int) $request->query('page', 1),
+          limit: (int) $request->query('limit', 20),
+          options: ['token' => $userToken]
+      );
+
+      if (!$response['success']) {
+          return response()->json(
+              ['error' => $response['error']],
+              $response['status'] ?? 500
+          );
+      }
+
+      return response()->json($response['data']);
+  });
+
+  // Get message analytics
+  Route::get('/api/analytics', function (Request $request) use ($signalHouse) {
+      $response = $signalHouse->messages->getAnalytics(
+          startDate: $request->query('startDate'),
+          endDate: $request->query('endDate'),
+          campaignId: $request->query('campaignId')
+      );
+
+      if (!$response['success']) {
+          return response()->json(
+              ['error' => $response['error']],
+              $response['status'] ?? 500
+          );
+      }
+
+      return response()->json($response['data']);
+  });
+
+
+REGISTRATIONS AND REGIONAL REPORTING
+--------------------------------------------------------------------------------
+A registration is what a jurisdiction (or its provider) requires before a sender
+may message. One model covers every jurisdiction: `region` is the jurisdiction
+(US, GB, CA, AU; any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB) and `type` selects the shape of `data`.
+Types: TEN_DLC_BRAND, TEN_DLC_CAMPAIGN, TOLL_FREE_BRAND, TOLL_FREE_CAMPAIGN,
+SHORT_CODE_BRAND, SHORT_CODE_PROGRAM, SHORT_CODE_LEASE (not available), VIRTUAL_LONG_CODE (UK) and ALPHANUMERIC_SENDER_ID (UK). Kinds: identity, program, sender. Channels: tenDLC, tollFree,
+shortCode, virtualLongCode, alphanumeric.
+
+Start with the catalog. GET /registration/catalog?region= returns {region,
+jurisdiction, sendingRequiresRegistration, registeredThrough, provisioning, types:[{type, kind,
+channel, provider, bundles, quantity:{min,max}, requiresParent, available}]}.
+registeredThrough is "registration" (use this API), "brandsAndCampaigns" (the US:
+register through the Brands and Campaigns APIs) or null (nothing to register, e.g.
+Canada). An unlisted country requires registration and offers no types.
+Quote and submit only a type whose `available` is true; other types answer 400.
+
+GET /registration/quotes?region=&type=&quantity= (1-100, default 1) returns
+{data:[quotes]}, one quote per capability bundle: {capabilities, quantity,
+currency, setupAmount, monthlyAmount, totalSetupAmount, totalMonthlyAmount,
+etaDays}. Amounts are integer microdollars; setupAmount/monthlyAmount are per
+sender and the totals cover the quantity. groupId is optional and staff-only.
+
+Submit on POST /registration (201) with region, type, subgroupId,
+capabilities (one of the type's bundles) and data. Set options['idempotencyKey'] to make a
+retry safe (see IDEMPOTENT REQUESTS). Worked example, UK Virtual Long Code: type "VIRTUAL_LONG_CODE",
+capabilities ["SMS"] or ["SMS","VOICE"], data {quantity (1-100), useCases (1-10
+strings), voice?}. The voice dossier is required exactly when capabilities
+include VOICE: companyName, companyPhone, companyWebsite, companyEmail,
+address {line1,line2?,city,postalCode,country}, companyDescription,
+campaignName, campaignDescription, optInMethods (WEB|KEYWORD|VERBAL),
+optOutKeywords (STOP and UNSUBSCRIBE), callTypes (LANDLINE|LOCAL|INTERNATIONAL),
+callsPerDay (1-5), callDurationMinutes (1-10, 15, 30, 45 or 60) and termsUrl.
+
+Worked example, UK alphanumeric sender ID: region "GB", type
+"ALPHANUMERIC_SENDER_ID", capabilities ["SMS"], data {requestedSenderId (3-11
+letters, digits, spaces, dots or dashes; at least one letter), trafficOrigin
+(LOCAL: headquartered in the UK | INTERNATIONAL), trafficType (TRANSACTIONAL |
+PROMOTIONAL), companyName, companyCountry, companyWebsite (http/https), industry,
+messageExample, senderRelationship? (required when requestedSenderId differs from
+companyName)}. quantity is always 1; the quote is one ["SMS"] bundle, 6000000
+setup and 6000000 monthly by default. Once the registration is APPROVED,
+data.phoneNumbers holds the granted sender (e.g. ["ACME"]); pass it as the sender
+to send SMS to UK recipients. The server appends "\nOpt out: sihou.io/o/{code}"
+to every message from it, counted in segments and in the estimate.
+
+GET /registration accepts groupId, subgroupId, region, type, kind, status,
+parentRegistrationId, phoneNumber (filter to registrations holding this phone
+number), sortBy (createdAt (default), subgroupId, registrationId, region or
+status), sortOrder (asc or desc (default)), page and limit (max 100) and returns
+{data,totalCount,page,limit}.
+Region and status each take one value or a list (string or array; an array is
+sent as repeated keys, e.g. status=PENDING_PROVIDER&status=APPROVED).
+GET /registration/:registrationId returns
+{registrationId, groupId, subgroupId, region, type, kind, channel, provider,
+externalId, parentRegistrationId, status, stage, capabilities, submittedAt,
+approvedAt, expiresAt, review:{decision,reviewedAt,reason}, data:{...type
+fields}, history:[{status,stage,actor,actorType,timestamp,reason}], createdAt,
+updatedAt}. For VIRTUAL_LONG_CODE, data also carries phoneNumbers, the numbers
+allocated so far. Statuses: DRAFT, SIGNAL_HOUSE_REVIEW, SIGNAL_HOUSE_APPROVED,
+SIGNAL_HOUSE_REJECTED, SUBMITTING, PENDING_PROVIDER, NEEDS_INFORMATION,
+PAYMENT_REQUIRED (the setup fee could not be funded; retried hourly), APPROVED,
+REJECTED, CANCELLED, PENDING_DELETE, DELETED, EXPIRED, RECONCILIATION_REQUIRED.
+`stage` is the provider's step inside a status. Never send from a sender whose
+registration is not APPROVED.
+
+DELETE /registration/:registrationId cancels a registration (roles api, admin,
+developer, user). Allowed from SIGNAL_HOUSE_REVIEW, SIGNAL_HOUSE_APPROVED,
+PENDING_PROVIDER, NEEDS_INFORMATION, PAYMENT_REQUIRED and APPROVED (409
+otherwise). Numbers already allocated stay on the account and stop sending.
+
+Staff only (the admin namespace exists only when the client enables admin, and
+enabling it grants no server permission):
+POST /:registrationId/review {action:"APPROVE"|"REJECT",reason?}; REJECT needs reason.
+POST /:registrationId/corrections {reason,data} saves the type's correctable
+fields (VIRTUAL_LONG_CODE: useCases, voice?) while the provider waits; owner,
+quantity, bundle and provider order are fixed.
+POST /:registrationId/numbers {phoneNumber} allocates a provider-owned number
+through the recovery path.
+POST /:registrationId/reconcile {externalId} links the provider order that was
+placed after an ambiguous submission; never place a second order to retry.
+GET /:registrationId/application?format=json returns {filename,contentType,base64};
+decode base64 before saving the document.
+
+Regional reporting: GET /message, /message/analytics, /message/analytics/detail,
+/message/analytics/by-subgroup, /message/analytics/by-error-code, /message/dnc and
+/message/dnc/analytics accept region and regionScopes; GET
+/message/analytics/filter-options accepts region only. region is US, GB or CA
+(any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB) as a single value, a repeated parameter or a CSV.
+regionScopes is a JSON array of OR-ed branches {region, channels, brandId?,
+campaignId?, phoneNumber?} with channels from tenDLC, virtualLongCode, tollFree,
+shortCode and p2p; [] matches nothing and omitting both keeps the existing scope.
+Example:
+[{"region":"US","channels":["tenDLC"],"brandId":["BUS1"]},
+ {"region":"GB","channels":["virtualLongCode"],"phoneNumber":["447400123456"]}]
+GET /message always accepts them; the analytics and DNC reads accept them only
+where the environment serves hourly analytics and reject them with a 400 elsewhere.
+
+getAnalytics, getAnalyticsDetail, getAnalyticsThroughput and getDncAnalytics
+accept registrationId (a single id or an array, sent as repeated registrationId
+parameters like campaignId): filter to traffic attributed to these registrations
+(hourly analytics only; a 400 while hourly reads are off). Except on
+getAnalyticsThroughput, which has no phoneNumber filter, a phoneNumber filter
+takes precedence. getPhoneNumbers accepts a single registrationId to list the
+numbers provisioned under that registration.
+
+getAnalyticsBySubgroup, getAnalyticsByErrorCode and getDncRecords accept registrationId
+the same way, with the same hourly-only rule and precedence. getMessages accepts
+registrationId in every environment: it filters to messages attributed to those
+registrations, and a phoneNumber filter narrows further. Every method returns 400 when
+registrationId is combined with campaignId.
+
+getAnalyticsFilterOptions returns each phone number with its type (TOLL_FREE,
+SHORT_CODE, ALPHANUMERIC, VIRTUAL_LONG_NUMBER, and older local-number spellings) and
+country (ISO-2), null when unknown. TOLL_FREE, SHORT_CODE and ALPHANUMERIC are channels
+by type; a US number of any other type is 10DLC and a non-US one is a Virtual Long Code.
+It also returns carriers, a plain array of carrier name strings.
+
+UK sending is SMS only, from a +44 virtual long code to GB mobile recipients; MMS
+and group MMS are unavailable. POST /message/estimate accepts a +44 sender
+(recipients 10-15 digits) and returns region "GB", or "CA" for a Canadian sender.
+A READY alphanumeric sender ID (e.g. "ACME") also sends SMS to UK recipients only;
+its estimate includes the opt-out footer.
+
+LANGUAGE EXAMPLE
+  $catalog = $signalHouse->registrations->getCatalog('GB');
+  $quotes = $signalHouse->registrations->getQuotes(['region' => 'GB', 'type' => 'VIRTUAL_LONG_CODE', 'quantity' => 1]);
+  $signalHouse->registrations->createRegistration([
+      'region' => 'GB', 'type' => 'VIRTUAL_LONG_CODE', 'subgroupId' => 'SGEXAMPLE',
+      'capabilities' => ['SMS'],
+      'data' => ['quantity' => 1, 'useCases' => ['Support']],
+  ]);
+  // UK alphanumeric sender ID
+  $signalHouse->registrations->getQuotes(['region' => 'GB', 'type' => 'ALPHANUMERIC_SENDER_ID']);
+  $signalHouse->registrations->createRegistration([
+      'region' => 'GB', 'type' => 'ALPHANUMERIC_SENDER_ID', 'subgroupId' => 'SGEXAMPLE',
+      'capabilities' => ['SMS'],
+      'data' => ['requestedSenderId' => 'ACME', 'trafficOrigin' => 'LOCAL', 'trafficType' => 'TRANSACTIONAL',
+          'companyName' => 'Acme', 'companyCountry' => 'United Kingdom', 'companyWebsite' => 'https://acme.example',
+          'industry' => 'Retail', 'messageExample' => 'Your Acme order has shipped.'],
+  ]);
+  $signalHouse->registrations->getRegistration('REG2');   // poll until APPROVED; data.phoneNumbers is ['ACME']
+  $signalHouse->messages->sendSMS('ACME', ['447400123456'], 'Your Acme order has shipped.');
+  $signalHouse->registrations->getRegistrations(['region' => 'GB', 'status' => 'PENDING_PROVIDER']);
+  $signalHouse->registrations->getRegistration('REG1');
+  $signalHouse->registrations->cancelRegistration('REG1');
+  $signalHouse->registrations->admin->reviewRegistration('REG1', 'APPROVE');   // enableAdmin: true
+  $signalHouse->messages->getMessages(['region' => ['US', 'GB'],
+      'regionScopes' => [['region' => 'GB', 'channels' => ['virtualLongCode']]]]);
+  $signalHouse->messages->getAnalyticsFilterOptions(['groupId' => 'G1', 'region' => 'GB']);
+
+
+TEMPLATES
+--------------------------------------------------------------------------------
+Versioned, raw message templates. One namespace, templates, on /template.
+The channel is read from the body on create; list takes an optional channel
+filter and capabilities an optional channel. Every call answers 404 while the
+environment's RCS switch is off. Every call carries groupId: GET in the query string, JSON
+writes in the body, the media upload as a form field.
+
+A template has a head {templateId, groupId, channel, name, tag,
+archivedAt, draftVersion, publishedVersion, revision,
+createdBy, createdAt, updatedAt} and numbered versions
+{version, state (DRAFT|PUBLISHED), body, contentHash, publishedAt, ...}. Reads
+of one template return {head, version}; lists return {data, total, page, limit}
+with summaries that add state and hasUnpublishedChanges.
+
+create creates draft version 1 from name (1-120 chars, unique per
+group and channel), body and optional tag (201). get takes version: a
+number, "draft" or "published"; omitted reads the published version, else the
+draft, and an explicit selector never falls back (404). update saves the
+draft from name / tag / body; writes apply directly (last write wins). Leave the
+tag key out to keep it; set it to null to clear it. A write to an archived
+template answers 409 {code:"TEMPLATE_ARCHIVED"} and a name already used in the
+group and channel 409 {code:"TEMPLATE_NAME_TAKEN"}. publish takes only
+groupId and always publishes the current draft; it answers 400
+{code:"TEMPLATE_INVALID", errors, warnings} for an incomplete draft, 409
+{code:"NO_DRAFT"} when there is none and 409 {code:"DRAFT_CHANGED"} when the
+draft changed while it was being published (publish again). archive takes only
+groupId.
+validate checks exactly one of body or version and never writes. capabilities returns the
+server's block kinds, action types, limits and media rules, and with provider
+(infobip|sinch) that provider's limits and unsupported features.
+uploadMedia sends multipart fields file and groupId and returns
+{mediaId, url, bytes, mimeType, kind, width, height, ...} (201).
+
+The body is the raw RcsTemplateBody {channel:"rcs", contentFormat:"rcs.blocks.v1",
+content:{blocks}, variables, defaults, fallback}; the SDK sends it unchanged and
+offers no conversion, duplication or starter helpers. Unknown keys are rejected.
+Placeholders are {{key}}; {{sender_name}} is reserved. Writes accept an
+idempotency key. Reads (including validate and capabilities) need
+admin, developer, api, billing or user; writes need admin, developer or api.
+
+LANGUAGE EXAMPLE
+  $body = [
+      'channel' => 'rcs', 'contentFormat' => 'rcs.blocks.v1',
+      'content' => ['blocks' => [['id' => 'b1', 'kind' => 'text', 'text' => 'Hi {{first_name}}']]],
+      'variables' => [['key' => 'first_name', 'type' => 'text', 'required' => true]],
+  ];
+  $created = $signalHouse->templates->create(['groupId' => 'G1', 'name' => 'Welcome', 'body' => $body],
+      ['idempotencyKey' => $uuid]);
+  $head = $created['data']['head'];
+  $signalHouse->templates->update($head['templateId'], [
+      'groupId' => 'G1',
+      'tag' => null,   // null clears the tag; leave the key out to keep it
+  ]);
+  $signalHouse->templates->validate($head['templateId'], ['groupId' => 'G1', 'version' => 'draft']);
+  $signalHouse->templates->publish($head['templateId'], ['groupId' => 'G1']);
+  $signalHouse->templates->list(['groupId' => 'G1', 'channel' => 'rcs', 'state' => 'PUBLISHED']);
+  $signalHouse->templates->capabilities(['groupId' => 'G1', 'provider' => 'infobip']);
+  $signalHouse->templates->uploadMedia(['groupId' => 'G1', 'file' => 'hero.png', 'fileName' => 'hero.png']);

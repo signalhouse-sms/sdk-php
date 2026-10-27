@@ -1,0 +1,10 @@
+# Keep Packagist/GitHub dist archives to the runtime package.
+/tests export-ignore
+/php-documentation export-ignore
+/legacy export-ignore
+/ci export-ignore
+/.github export-ignore
+/LEGACY_NOTICE.md export-ignore
+/LEGACY_README.md export-ignore
+/.gitignore export-ignore
+/.gitattributes export-ignore

@@ -1,0 +1,9 @@
+{
+    "name": "signalhouse/sdk",
+    "description": "Deprecated: this package has moved to signalhouse-sms/sdk. This shim installs signalhouse-sms/sdk at the same version.",
+    "type": "library",
+    "license": "ISC",
+    "require": {
+        "signalhouse-sms/sdk": "1.5.1"
+    }
+}
