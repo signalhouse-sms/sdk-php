@@ -545,6 +545,95 @@ class Agents
     }
 
     /**
+     * List paused agent conversations in a group, newest first. A paused conversation is one a
+     * person took over; the agent stays out of it until it is resumed. Each pause carries groupId,
+     * subgroupId, channel, endpointValue, contactIdentifier, reason ("human_reply", "escalation" or "manual"),
+     * pausedBy, createdAt, and updatedAt.
+     *
+     * Allowed roles: api, admin, developer, billing, user.
+     *
+     * @param array $params Filter parameters. Requires 'groupId'; also accepts 'subgroupId',
+     *                       'channel' ("sms"), 'endpointValue' (the agent's number) and
+     *                       'contactIdentifier' (the contact's number), digits only, no "+".
+     * @param array $options Additional request options
+     * @return array The response from the server
+     */
+    public function getAgentContactPauses(array $params = [], array $options = []): array
+    {
+        $this->client->require(['groupId' => $params['groupId'] ?? null]);
+        $queryString = $this->client->getQueryString($params);
+        return $this->client->request("/agent/pauses{$queryString}", array_merge([
+            'method' => 'GET',
+        ], $options));
+    }
+
+    /**
+     * Pause an agent on one conversation (its number + one contact). The agent stops answering that
+     * contact on that number until the conversation is resumed; there is no timer. The conversation's
+     * pending replies are rejected. Pausing a paused conversation keeps the original pause.
+     *
+     * Allowed roles: api, admin, developer, billing, user.
+     *
+     * @param string $channel The channel; must be "sms"
+     * @param string $endpointValue The agent's number: 10 to 15 digits, country code included, no "+"
+     * @param string $contactIdentifier The contact's number: 10 to 15 digits, country code included, no "+"
+     * @param array $pauseData Optional 'reason': "human_reply" or "manual" (the default). Sent as an
+     *                         empty JSON object when empty.
+     * @param array $options Additional request options
+     * @return array The response from the server (the pause)
+     */
+    public function pauseAgentConversation(
+        string $channel,
+        string $endpointValue,
+        string $contactIdentifier,
+        array $pauseData = [],
+        array $options = []
+    ): array {
+        $this->client->require([
+            'channel' => $channel,
+            'endpointValue' => $endpointValue,
+            'contactIdentifier' => $contactIdentifier,
+        ]);
+        $safeChannel = rawurlencode($channel);
+        $safeEndpointValue = rawurlencode($endpointValue);
+        $safeContactIdentifier = rawurlencode($contactIdentifier);
+        return $this->client->request("/agent/pauses/{$safeChannel}/{$safeEndpointValue}/{$safeContactIdentifier}", array_merge([
+            'method' => 'PUT',
+            'body' => $pauseData === [] ? new \stdClass() : $pauseData,
+        ], $options));
+    }
+
+    /**
+     * Resume an agent on a paused conversation, so it answers the contact's next text again.
+     *
+     * Allowed roles: api, admin, developer, billing, user.
+     *
+     * @param string $channel The channel; must be "sms"
+     * @param string $endpointValue The agent's number: 10 to 15 digits, country code included, no "+"
+     * @param string $contactIdentifier The contact's number: 10 to 15 digits, country code included, no "+"
+     * @param array $options Additional request options
+     * @return array The response from the server (the removed pause)
+     */
+    public function resumeAgentConversation(
+        string $channel,
+        string $endpointValue,
+        string $contactIdentifier,
+        array $options = []
+    ): array {
+        $this->client->require([
+            'channel' => $channel,
+            'endpointValue' => $endpointValue,
+            'contactIdentifier' => $contactIdentifier,
+        ]);
+        $safeChannel = rawurlencode($channel);
+        $safeEndpointValue = rawurlencode($endpointValue);
+        $safeContactIdentifier = rawurlencode($contactIdentifier);
+        return $this->client->request("/agent/pauses/{$safeChannel}/{$safeEndpointValue}/{$safeContactIdentifier}", array_merge([
+            'method' => 'DELETE',
+        ], $options));
+    }
+
+    /**
      * List held agent replies (the Pending Replies queue) in a group, newest first. Each draft
      * carries agentReplyDraftId, groupId, subgroupId, agentProfileId, conversationId, channel,
      * endpointValue, contactPhoneNumber, inboundText, draftText, sentText, reason, status,

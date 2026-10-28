@@ -59,14 +59,18 @@ class Numbers
                  *
                  * @param string $portingId The ID of the port-in request
                  * @param array $options Additional request options
+                 * @param string|null $subGroupId Subgroup to assign when the request has none yet. Ignored if the
+                 *   request already has a subgroup assigned -- an existing assignment is never overwritten. Appended
+                 *   last, after $options, so existing positional callers are unaffected.
                  * @return array The response from the server
                  */
-                public function approvePortRequest(string $portingId, array $options = []): array
+                public function approvePortRequest(string $portingId, array $options = [], ?string $subGroupId = null): array
                 {
                     $this->client->require(['portingId' => $portingId]);
                     $safePortingId = rawurlencode($portingId);
                     return $this->client->request("/number/portin/{$safePortingId}/approve", array_merge([
                         'method' => 'POST',
+                        'body' => ['subGroupId' => $subGroupId],
                     ], $options));
                 }
 

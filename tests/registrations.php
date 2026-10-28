@@ -188,23 +188,48 @@ check(end($client->calls)[0] === '/number?groupId=G1', 'phone numbers leave out 
 
 // A given subgroup goes into the business verification's subgroupId query parameter, never the body.
 $brands = new \SignalHouse\SDK\Domains\Brands($client, $client, true);
-$brands->getBusinessVerification('G/1', ['token' => 'test-token'], subgroupId: 'S0000001');
+$brands->getBusinessVerifications('G/1', 'S0000001', ['token' => 'test-token']);
 [$url, $options] = end($client->calls);
-check($url === '/brand/business-verification/G%2F1?subgroupId=S0000001' && $options['method'] === 'GET' && !isset($options['body']) && $options['token'] === 'test-token', 'subgroup business verification read');
+check($url === '/brand/business-verification/G%2F1?subgroupId=S0000001' && $options['method'] === 'GET' && !isset($options['body']) && $options['token'] === 'test-token', 'subgroup business verification list');
 $details = ['businessName' => 'Acme Inc', 'registrationType' => 'EIN', 'registrationNumber' => '12-3456789'];
-$brands->submitBusinessVerification('G/1', $details, ['idempotencyKey' => 'key-1'], subgroupId: 'S0000001');
+$brands->createBusinessVerification('G/1', $details, 'S0000001', ['idempotencyKey' => 'key-1']);
 [$url, $options] = end($client->calls);
-check($url === '/brand/business-verification/G%2F1?subgroupId=S0000001' && $options['method'] === 'PUT' && $options['body'] === $details && $options['idempotencyKey'] === 'key-1', 'subgroup business verification submit');
-$brands->getBusinessVerification('G1', subgroupId: 'S&1 2');
+check($url === '/brand/business-verification/G%2F1?subgroupId=S0000001' && $options['method'] === 'POST' && $options['body'] === $details && $options['idempotencyKey'] === 'key-1', 'subgroup business verification create');
+$brands->getBusinessVerifications('G1', subgroupId: 'S&1 2');
 check(end($client->calls)[0] === '/brand/business-verification/G1?subgroupId=S%261+2', 'subgroup escaped as a query value');
 // Without a subgroup both URLs stay exactly as they were.
-$brands->getBusinessVerification('G1');
-check(end($client->calls)[0] === '/brand/business-verification/G1', 'business verification read without a subgroup');
-$brands->getBusinessVerification('G1', subgroupId: null);
-check(end($client->calls)[0] === '/brand/business-verification/G1', 'business verification read with a null subgroup');
-$brands->submitBusinessVerification('G1', $details);
+$brands->getBusinessVerifications('G1');
+check(end($client->calls)[0] === '/brand/business-verification/G1', 'business verification list without a subgroup');
+$brands->getBusinessVerifications('G1', subgroupId: null);
+check(end($client->calls)[0] === '/brand/business-verification/G1', 'business verification list with a null subgroup');
+$brands->createBusinessVerification('G1', $details);
 [$url, $options] = end($client->calls);
-check($url === '/brand/business-verification/G1' && $options['body'] === $details, 'business verification submit without a subgroup');
+check($url === '/brand/business-verification/G1' && $options['method'] === 'POST' && $options['body'] === $details, 'business verification create without a subgroup');
+
+// One business verification is read and updated on its own path under the group's.
+$brands->getBusinessVerification('G/1', 'BV/1', ['token' => 'test-token']);
+[$url, $options] = end($client->calls);
+check($url === '/brand/business-verification/G%2F1/BV%2F1' && $options['method'] === 'GET' && !isset($options['body']) && $options['token'] === 'test-token', 'business verification read');
+$brands->updateBusinessVerification('G/1', 'BV/1', $details, ['idempotencyKey' => 'key-1']);
+[$url, $options] = end($client->calls);
+check($url === '/brand/business-verification/G%2F1/BV%2F1' && $options['method'] === 'PUT' && $options['body'] === $details && $options['idempotencyKey'] === 'key-1', 'business verification update');
+check(!method_exists($brands, 'submitBusinessVerification'), 'submitBusinessVerification is gone');
+$sent = count($client->calls);
+$refusals = [
+    'groupId' => [fn () => $brands->getBusinessVerification('', 'BV1'), fn () => $brands->updateBusinessVerification('', 'BV1', $details)],
+    'businessVerificationId' => [fn () => $brands->getBusinessVerification('G1', ''), fn () => $brands->updateBusinessVerification('G1', '', $details)],
+];
+foreach ($refusals as $field => $calls) {
+    foreach ($calls as $call) {
+        try {
+            $call();
+            throw new RuntimeException("a business verification call accepted a missing $field");
+        } catch (\SignalHouse\SDK\Exceptions\ValidationException $error) {
+            check($error->getMessage() === "Missing required parameter: $field", "business verification calls name the missing $field");
+        }
+    }
+}
+check(count($client->calls) === $sent, 'refused business verification calls send nothing');
 
 // The staff toll-free ISV account is read and set on the group's path; the body holds only the account and its key.
 $brands->getTollFreeIsvAccount('G/1', ['token' => 'test-token']);
@@ -234,4 +259,4 @@ foreach (['groupId', 'accountSid', 'apiKeySid', 'apiKeySecret'] as $index => $fi
 }
 check(count($client->calls) === $sent, 'refused toll-free ISV account calls send nothing');
 
-echo "Registration PHP contracts passed (7 regional reads, filter options, catalog, quotes, registrations, alphanumeric submission, opt-out links, staff namespace, validation, subgroup business verification, toll-free ISV account)\n";
+echo "Registration PHP contracts passed (7 regional reads, filter options, catalog, quotes, registrations, alphanumeric submission, opt-out links, staff namespace, validation, business verifications, toll-free ISV account)\n";

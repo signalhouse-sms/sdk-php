@@ -2,6 +2,8 @@
 
 Official PHP SDK for the SignalHouse platform.
 
+Full API reference and guides: https://app2.signalhouse.io/docs
+
 ## Requirements
 
 - PHP 8.1 or higher
@@ -49,13 +51,13 @@ $result = $sdk->messages->sendSMS(
 // Get brands
 $brands = $sdk->brands->getBrands(['groupId' => 'G12345678']);
 
-// Get a group's business verification; when required is true and status is NOT_STARTED,
-// submit it with submitBusinessVerification before creating the group's first toll-free brand
-$verification = $sdk->brands->getBusinessVerification('G12345678');
+// List a group's business verifications; when required is true, a new toll-free brand names a
+// VERIFIED one as tollFree.businessVerificationId (createBusinessVerification adds one)
+$verifications = $sdk->brands->getBusinessVerifications('G12345678');
 
 // A group that verifies each subgroup's business separately names the subgroup, for both
-// getBusinessVerification and submitBusinessVerification
-$subgroupVerification = $sdk->brands->getBusinessVerification('G12345678', subgroupId: 'S1234567');
+// getBusinessVerifications and createBusinessVerification
+$subgroupVerifications = $sdk->brands->getBusinessVerifications('G12345678', subgroupId: 'S1234567');
 
 // Check wallet balance
 $wallet = $sdk->billing->getWallet('G12345678');
