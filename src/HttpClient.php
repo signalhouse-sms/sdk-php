@@ -9,11 +9,13 @@ use SignalHouse\SDK\Exceptions\ValidationException;
 class HttpClient
 {
     private Client $client;
+    private string $baseUrl;
     private string $apiKey;
     private bool $isMultipart;
 
     public function __construct(string $baseUrl, string $apiKey, bool $isMultipart = false)
     {
+        $this->baseUrl = rtrim($baseUrl, '/');
         $this->apiKey = $apiKey;
         $this->isMultipart = $isMultipart;
 
@@ -27,6 +29,16 @@ class HttpClient
             'headers' => $headers,
             'http_errors' => false,
         ]);
+    }
+
+    /**
+     * Get the API base URL this client was configured with, without a trailing slash
+     *
+     * @return string The base URL
+     */
+    public function getBaseUrl(): string
+    {
+        return $this->baseUrl;
     }
 
     /**

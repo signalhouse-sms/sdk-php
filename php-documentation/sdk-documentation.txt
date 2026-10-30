@@ -95,6 +95,78 @@ AUTH  ($signalHouse->auth)
       ?int $limit, ?array $options)
     Get token login history.
 
+  getOAuthAuthorizationUrl(string $provider, ?string $next,
+      ?string $email, ?string $linkTicket, ?string $reauthTicket)
+    Build (no request) the absolute URL that starts an OAuth sign-in; navigate
+    a browser to it. $provider: "google", "microsoft", "apple" or "sso"
+    (Enterprise SSO; requires $email, whose domain picks the identity provider).
+    With $linkTicket (from createOAuthLink) it links the provider to the
+    signed-in account instead; the API returns the browser to
+    /Settings/Security with pendingLink (pass it to confirmOAuthLink) or
+    linkError. With $reauthTicket (from createOAuthReauth) the account signs in
+    again to confirm it's them ("sso" needs no $email then). Query keys, only
+    when set: email, linkTicket, reauthTicket, next.
+
+  getOAuthLinks(?array $options)
+    List the caller's sign-in methods. Sends a GET to /auth/oauth/links.
+    Returns { passwordKnown, links: [{ provider, email, linkedAt, lastLoginAt }] }.
+    passwordKnown is false for an account created through a provider or SSO.
+
+  createOAuthLink(string $provider, ?array $options)
+    Start linking "google", "microsoft" or "apple" to the caller's account.
+    Sends a POST to /auth/oauth/:provider/link (no body).
+    Returns { linkTicket, expiresInSeconds }; pass linkTicket to
+    getOAuthAuthorizationUrl. Requires a fresh confirmTwoFactorIdentity.
+    The provider round trip returns pendingLink, which must be passed to
+    confirmOAuthLink.
+
+  createOAuthReauth(string $provider, ?array $options)
+    Start signing in again with a provider linked to the caller's account
+    ("google", "microsoft", "apple" or "sso"), to confirm it's them. Sends a
+    POST to /auth/oauth/:provider/reauth (no body). Spends nothing.
+    Returns { reauthTicket, reauthSecret, expiresInSeconds } (keep reauthSecret for the confirm call); pass reauthTicket to
+    getOAuthAuthorizationUrl. The browser comes back to /Settings/Security
+    with a single-use pendingReauth (the session that
+    started it redeems it with confirmOAuthReauth) or reauthError.
+
+  confirmOAuthReauth(string $pendingReauth, string $reauthSecret,
+      ?array $options)
+    Finish signing in again with a linked provider. Sends a POST to
+    /auth/oauth/reauth/confirm with { pendingReauth, reauthSecret }. pendingReauth
+    is the
+    single-use value (valid 5 minutes) the createOAuthReauth round trip returns
+    to /Settings/Security with. It counts only for the same account and
+    session that started it; 400 when expired or used, 403 for another
+    account or session. reauthSecret is the value the create call returned;
+    a wrong or missing secret is refused (403) and uses up the re-sign-in.
+    Returns: { identityConfirmed } (true when 2FA is off, so it counts as a
+    confirmed identity).
+
+  confirmOAuthLink(string $pendingLink, ?array $options)
+    Finish linking a provider. Pass the single-use pendingLink that the
+    createOAuthLink round trip returned to /Settings/Security; it links only
+    for the account the link was started for. Sends a POST to
+    /auth/oauth/links/confirm with { pendingLink }.
+    Returns the caller's { passwordKnown, links: [{ provider, email, linkedAt, lastLoginAt }] }.
+
+  deleteOAuthLink(string $provider, ?array $options)
+    Unlink a provider ("google", "microsoft", "apple" or "sso") from the
+    caller's account. Sends a DELETE to /auth/oauth/:provider/link.
+    Refused (400) when it is the account's only sign-in method. Requires a
+    fresh confirmTwoFactorIdentity. Returns the remaining { passwordKnown, links }.
+
+  confirmTwoFactorIdentity(?string $password, ?string $code, ?string $method,
+      ?bool $usingBackupCode, ?array $options)
+    Confirm identity before a sensitive change (2FA changes, linking/unlinking
+    providers, saving/deleting group SSO). An account without its own password
+    (passwordKnown false) confirms with the code from
+    sendTwoFactorIdentityCode("email") using $method "email".
+
+  sendTwoFactorIdentityCode(string $method, ?array $options)
+    Send a code by text or email for confirmTwoFactorIdentity ("sms" or
+    "email"; not needed for "app"). An account without its own password
+    (passwordKnown false) sends "email" here with 2FA off.
+
 
 BILLING  ($signalHouse->billing)
 --------------------------------------------------------------------------------
@@ -286,6 +358,36 @@ GROUPS  ($signalHouse->groups)
 
   updateGroup(string $id, array $groupData, ?array $options)
     Update group information.
+
+  getSsoConfiguration(string $groupId, ?array $options)
+    Get the group's Enterprise SSO configuration. Role: admin.
+    Sends a GET to /group/sso?groupId=...
+    Returns { groupId, available, callbackUrl, connection, domains }.
+
+  saveSsoConnection(string $groupId, string $issuer, string $clientId,
+      ?string $clientSecret, ?bool $enabled, ?array $options)
+    Create or update the group's OpenID Connect identity provider. Role: admin.
+    Sends a PUT to /group/sso with { groupId, issuer, clientId, clientSecret?,
+    enabled? } (null values omitted). $clientSecret is required the first time.
+    Requires a fresh auth->confirmTwoFactorIdentity.
+
+  deleteSsoConnection(string $groupId, ?array $options)
+    Remove the group's identity provider and domains, unlinking every account
+    that signed in through it. Role: admin. Sends a DELETE to
+    /group/sso?groupId=... Requires a fresh auth->confirmTwoFactorIdentity.
+
+  addSsoDomain(string $groupId, string $domain, ?array $options)
+    Claim an email domain for the group's SSO. Role: admin.
+    Sends a POST to /group/sso/domains with { groupId, domain }. The response
+    includes the DNS TXT record that verifies it.
+
+  verifySsoDomain(string $groupId, string $domain, ?array $options)
+    Verify a claimed domain by its DNS TXT record. Role: admin.
+    Sends a POST to /group/sso/domains/:domain/verify with { groupId }.
+
+  removeSsoDomain(string $groupId, string $domain, ?array $options)
+    Remove a domain from the group's SSO. Role: admin.
+    Sends a DELETE to /group/sso/domains/:domain?groupId=...
 
 
 LANDINGS  ($signalHouse->landings)

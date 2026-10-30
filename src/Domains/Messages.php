@@ -106,7 +106,7 @@ class Messages
      *     messageType scopes the SENTIMENT figures to SMS, MMS or P2P (single value, array, or
      *     comma-separated string); omit for all scored types. It does NOT narrow the message counts,
      *     which are always returned split per type.
-     *     carrierFamily filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless);
+     *     carrierFamily filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics);
      *     single value, array, or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
      *     dateBounds is which contract binds startDate/endDate. "day": each bound is widened to its
      *     whole UTC day. "exact": a timestamp is bound as the instant it
@@ -144,7 +144,7 @@ class Messages
      *     messageType scopes the SENTIMENT figures to SMS, MMS or P2P (single value, array, or
      *     comma-separated string); omit for all scored types. It does NOT narrow the message counts,
      *     which are always returned split per type.
-     *     carrierFamily filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless);
+     *     carrierFamily filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics);
      *     single value, array, or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
      *     granularity ("day" | "hour") is the time-bucket grain of the byDate rows. Omit for day (each
      *     row's _id is a "YYYY-MM-DD" date). "hour" buckets by hour (each row's _id is a
@@ -247,7 +247,7 @@ class Messages
      *     scopes row inclusion and ranking by the stored channel. messageType scopes ONLY the
      *     sentiment figures (SMS, MMS or P2P, single value or array); omit for all scored types. It
      *     does not narrow the message counts, which are always returned split per type.
-     *     carrierFamily filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless);
+     *     carrierFamily filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics);
      *     single value, array, or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
      *     registrationId filters to traffic attributed to these registrations (hourly analytics only;
      *     a 400 while hourly reads are off); single value or array. A phoneNumber filter takes precedence.
@@ -282,7 +282,7 @@ class Messages
      * @param array $params Filter parameters. limit is capped at 50. channel accepts "both" (every
      *     code), "tenDLC", "virtualLongCode", "tollFree", "shortCode", or "p2p" as a single value or array. When one
      *     channel is selected, totalErrors reflects only that channel.
-     *     carrierFamily filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless);
+     *     carrierFamily filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics);
      *     single value, array, or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
      *     registrationId filters to traffic attributed to these registrations (hourly analytics only;
      *     a 400 while hourly reads are off); single value or array. A phoneNumber filter takes precedence.
@@ -369,7 +369,7 @@ class Messages
      *     on subgroup-scoped records for non-US recipients), optOutKeyword — the normalized keyword that revoked consent (e.g. "stop", "opt out"; a
      *     repeat opt-out records the most recent word), null for opt-outs recorded before keyword
      *     capture shipped — and carrierFamily, the resolved carrier family of the recipient number
-     *     (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, Standard, IceWireless),
+     *     (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics),
      *     copied from the inbound message that triggered the opt-out.
      */
     public function getDncRecords(array $params = [], array $options = []): array

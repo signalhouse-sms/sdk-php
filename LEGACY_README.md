@@ -107,22 +107,6 @@ $sdk->campaigns->admin->approveCampaign('campaign-id');
 $sdk->groups->admin->getGroups(['page' => 1, 'limit' => 20]);
 ```
 
-Staff-only brand methods sit on `$sdk->brands` itself, and the API checks the caller's role:
-
-```php
-// Staff: read a group's toll-free ISV account (null when it has none; the API key secret is never returned)
-$isvAccount = $sdk->brands->getTollFreeIsvAccount('G12345678');
-
-// signalhouse_admin only: register it before setting the group's toll-free provider
-// (once the group has records with that provider, only the API key can be replaced)
-$sdk->brands->setTollFreeIsvAccount(
-    groupId: 'G12345678',
-    accountSid: 'AC...',
-    apiKeySid: 'SK...',
-    apiKeySecret: 'your-api-key-secret'
-);
-```
-
 ## Response Format
 
 All methods return a standardized response array:

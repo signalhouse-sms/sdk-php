@@ -161,4 +161,119 @@ class Groups
             'body' => $groupData,
         ], $options));
     }
+
+    /**
+     * Get a group's Enterprise SSO configuration: whether the API can sign in through an OpenID
+     * Connect identity provider, the callback URL to register at the identity provider, the saved
+     * provider (never its client secret), and each claimed domain with the DNS TXT record that
+     * verifies it. Role: admin.
+     *
+     * @param string $groupId The group
+     * @param array $options Additional request options
+     * @return array The response from the server (['groupId' => ..., 'available' => ..., 'callbackUrl' => ..., 'connection' => ..., 'domains' => [...]])
+     */
+    public function getSsoConfiguration(string $groupId, array $options = []): array
+    {
+        $this->client->require(['groupId' => $groupId]);
+        $queryString = $this->client->getQueryString(['groupId' => $groupId]);
+        return $this->client->request("/group/sso{$queryString}", array_merge([
+            'method' => 'GET',
+        ], $options));
+    }
+
+    /**
+     * Create or update a group's OpenID Connect identity provider. Requires a fresh
+     * auth->confirmTwoFactorIdentity from the same session. Role: admin.
+     *
+     * @param string $groupId The group
+     * @param string $issuer The provider's https issuer URL
+     * @param string $clientId The client ID registered at the provider
+     * @param string|null $clientSecret The client secret; required the first time, omit to keep the saved one
+     * @param bool|null $enabled Whether sign-in through the provider is on (default true)
+     * @param array $options Additional request options
+     * @return array The SSO configuration
+     */
+    public function saveSsoConnection(string $groupId, string $issuer, string $clientId, ?string $clientSecret = null, ?bool $enabled = null, array $options = []): array
+    {
+        $this->client->require(['groupId' => $groupId, 'issuer' => $issuer, 'clientId' => $clientId]);
+        $body = array_filter(
+            ['groupId' => $groupId, 'issuer' => $issuer, 'clientId' => $clientId, 'clientSecret' => $clientSecret, 'enabled' => $enabled],
+            fn ($value) => $value !== null
+        );
+        return $this->client->request('/group/sso', array_merge([
+            'method' => 'PUT',
+            'body' => $body,
+        ], $options));
+    }
+
+    /**
+     * Remove a group's identity provider and its domains, and unlink every account that signed in
+     * through it. Requires a fresh auth->confirmTwoFactorIdentity from the same session. Role: admin.
+     *
+     * @param string $groupId The group
+     * @param array $options Additional request options
+     * @return array The (now empty) SSO configuration
+     */
+    public function deleteSsoConnection(string $groupId, array $options = []): array
+    {
+        $this->client->require(['groupId' => $groupId]);
+        $queryString = $this->client->getQueryString(['groupId' => $groupId]);
+        return $this->client->request("/group/sso{$queryString}", array_merge([
+            'method' => 'DELETE',
+        ], $options));
+    }
+
+    /**
+     * Claim an email domain for a group's SSO; the response includes the DNS TXT record that
+     * verifies it. Role: admin.
+     *
+     * @param string $groupId The group
+     * @param string $domain The domain, e.g. "acme.com"
+     * @param array $options Additional request options
+     * @return array The SSO configuration
+     */
+    public function addSsoDomain(string $groupId, string $domain, array $options = []): array
+    {
+        $this->client->require(['groupId' => $groupId, 'domain' => $domain]);
+        return $this->client->request('/group/sso/domains', array_merge([
+            'method' => 'POST',
+            'body' => ['groupId' => $groupId, 'domain' => $domain],
+        ], $options));
+    }
+
+    /**
+     * Verify a claimed domain by its DNS TXT record. Role: admin.
+     *
+     * @param string $groupId The group
+     * @param string $domain The claimed domain
+     * @param array $options Additional request options
+     * @return array The SSO configuration
+     */
+    public function verifySsoDomain(string $groupId, string $domain, array $options = []): array
+    {
+        $this->client->require(['groupId' => $groupId, 'domain' => $domain]);
+        $safeDomain = rawurlencode($domain);
+        return $this->client->request("/group/sso/domains/{$safeDomain}/verify", array_merge([
+            'method' => 'POST',
+            'body' => ['groupId' => $groupId],
+        ], $options));
+    }
+
+    /**
+     * Remove a domain from a group's SSO. Role: admin.
+     *
+     * @param string $groupId The group
+     * @param string $domain The domain
+     * @param array $options Additional request options
+     * @return array The SSO configuration
+     */
+    public function removeSsoDomain(string $groupId, string $domain, array $options = []): array
+    {
+        $this->client->require(['groupId' => $groupId, 'domain' => $domain]);
+        $safeDomain = rawurlencode($domain);
+        $queryString = $this->client->getQueryString(['groupId' => $groupId]);
+        return $this->client->request("/group/sso/domains/{$safeDomain}{$queryString}", array_merge([
+            'method' => 'DELETE',
+        ], $options));
+    }
 }

@@ -218,67 +218,6 @@ class Brands
     }
 
     /**
-     * Get a group's toll-free ISV account: its own top-level account at the toll-free provider, which
-     * Signal House staff register for a platform whose subgroups are separate businesses.
-     * signalhouse_api, signalhouse_admin or signalhouse_user only.
-     *
-     * The response data holds groupId, accountSid, apiKeySid, primaryProfileSid (the account's approved
-     * primary business profile), createdAt and updatedAt, or is null when the group has none. The API key
-     * secret is never returned. A group that doesn't exist or isn't active answers 404.
-     *
-     * @param string $groupId The ID of the group whose ISV account to get
-     * @param array $options Additional request options
-     * @return array The response from the server
-     * @throws \SignalHouse\SDK\Exceptions\ValidationException If groupId is missing
-     */
-    public function getTollFreeIsvAccount(string $groupId, array $options = []): array
-    {
-        $this->client->require(['groupId' => $groupId]);
-        $safeGroupId = rawurlencode($groupId);
-        return $this->client->request("/brand/toll-free-isv-account/{$safeGroupId}", array_merge([
-            'method' => 'GET',
-        ], $options));
-    }
-
-    /**
-     * Register a group's toll-free ISV account, or replace the API key of the one already registered.
-     * signalhouse_admin only.
-     *
-     * The toll-free provider checks the account and key before they are stored, and finds the account's
-     * approved primary business profile itself; a refused account or key answers 400 with the reason.
-     * Register it before setting the group's toll-free provider: once the group has records with that
-     * provider, only the API key of the registered account can be replaced.
-     *
-     * @param string $groupId The ID of the group whose ISV account to register
-     * @param string $accountSid The ISV's own top-level account SID (AC followed by 32 lowercase hex characters)
-     * @param string $apiKeySid A Main API key SID in that account (SK followed by 32 lowercase hex characters)
-     * @param string $apiKeySecret The API key's secret (1 to 128 characters); stored encrypted and never returned
-     * @param array $options Additional request options
-     * @return array The response from the server: the stored ISV account, the same shape as
-     *               getTollFreeIsvAccount
-     * @throws \SignalHouse\SDK\Exceptions\ValidationException If groupId, accountSid, apiKeySid or apiKeySecret is missing
-     */
-    public function setTollFreeIsvAccount(
-        string $groupId,
-        string $accountSid,
-        string $apiKeySid,
-        string $apiKeySecret,
-        array $options = []
-    ): array {
-        $this->client->require([
-            'groupId' => $groupId,
-            'accountSid' => $accountSid,
-            'apiKeySid' => $apiKeySid,
-            'apiKeySecret' => $apiKeySecret,
-        ]);
-        $safeGroupId = rawurlencode($groupId);
-        return $this->client->request("/brand/toll-free-isv-account/{$safeGroupId}", array_merge([
-            'method' => 'PUT',
-            'body' => ['accountSid' => $accountSid, 'apiKeySid' => $apiKeySid, 'apiKeySecret' => $apiKeySecret],
-        ], $options));
-    }
-
-    /**
      * Create a local Short Code brand for manual Signal House review.
      * The route forces SHORT_CODE and returns a synchronous 201 PENDING_APPROVAL record with an
      * SCB-prefixed brandId.

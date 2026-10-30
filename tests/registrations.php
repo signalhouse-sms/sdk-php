@@ -231,32 +231,4 @@ foreach ($refusals as $field => $calls) {
 }
 check(count($client->calls) === $sent, 'refused business verification calls send nothing');
 
-// The staff toll-free ISV account is read and set on the group's path; the body holds only the account and its key.
-$brands->getTollFreeIsvAccount('G/1', ['token' => 'test-token']);
-[$url, $options] = end($client->calls);
-check($url === '/brand/toll-free-isv-account/G%2F1' && $options['method'] === 'GET' && !isset($options['body']) && $options['token'] === 'test-token', 'toll-free ISV account read');
-$accountSid = 'AC' . str_repeat('0', 32);
-$apiKeySid = 'SK' . str_repeat('1', 32);
-$brands->setTollFreeIsvAccount('G/1', $accountSid, $apiKeySid, 'key-secret', ['idempotencyKey' => 'key-1']);
-[$url, $options] = end($client->calls);
-check($url === '/brand/toll-free-isv-account/G%2F1' && $options['method'] === 'PUT' && $options['idempotencyKey'] === 'key-1', 'toll-free ISV account set');
-check($options['body'] === ['accountSid' => $accountSid, 'apiKeySid' => $apiKeySid, 'apiKeySecret' => 'key-secret'], 'toll-free ISV account body');
-$sent = count($client->calls);
-try {
-    $brands->getTollFreeIsvAccount('');
-    throw new RuntimeException('getTollFreeIsvAccount accepted a missing groupId');
-} catch (\SignalHouse\SDK\Exceptions\ValidationException $error) {
-}
-foreach (['groupId', 'accountSid', 'apiKeySid', 'apiKeySecret'] as $index => $field) {
-    $args = ['G1', $accountSid, $apiKeySid, 'key-secret'];
-    $args[$index] = '';
-    try {
-        $brands->setTollFreeIsvAccount(...$args);
-        throw new RuntimeException("setTollFreeIsvAccount accepted a missing $field");
-    } catch (\SignalHouse\SDK\Exceptions\ValidationException $error) {
-        check($error->getMessage() === "Missing required parameter: $field", "setTollFreeIsvAccount names the missing $field");
-    }
-}
-check(count($client->calls) === $sent, 'refused toll-free ISV account calls send nothing');
-
-echo "Registration PHP contracts passed (7 regional reads, filter options, catalog, quotes, registrations, alphanumeric submission, opt-out links, staff namespace, validation, business verifications, toll-free ISV account)\n";
+echo "Registration PHP contracts passed (7 regional reads, filter options, catalog, quotes, registrations, alphanumeric submission, opt-out links, staff namespace, validation, business verifications)\n";

@@ -5,6 +5,6 @@
     "homepage": "https://github.com/signalhouse-sms/sdk-php",
     "license": "ISC",
     "require": {
-        "signalhouse-sms/sdk": "1.6.0"
+        "signalhouse-sms/sdk": "1.7.0"
     }
 }
