@@ -222,6 +222,25 @@ class Campaigns
     }
 
     /**
+     * Get today's T-Mobile usage against the daily limit for every active campaign in a group that has one: the same limits and counter as getCampaignThroughputLimits, for the whole group in
+     * one call.
+     *
+     * @param string $groupId The group identifier
+     * @param array $options Additional request options
+     * @return array The response from the server: [{ campaignId, brandId, brandName, usecase, tmobile: { tier, dailyLimit, usedToday: { date, segments, resetsAt } } }].
+     *     Campaigns without a T-Mobile limit (unverified brand, GOVERNMENT entity, PUBLIC_SAFETY_RESTRICTED usecase) are left out. The counter is per brand EIN and UTC day, so every campaign of a brand shows the same usage; a LOW_VOLUME campaign's limit is 2,000 whatever the brand's score.
+     */
+    public function getGroupThroughputUsage(string $groupId, array $options = []): array
+    {
+        $this->client->require(['groupId' => $groupId]);
+        $queryString = $this->client->getQueryString(['groupId' => $groupId]);
+
+        return $this->client->request("/campaign/throughput-usage{$queryString}", array_merge([
+            'method' => 'GET',
+        ], $options));
+    }
+
+    /**
      * Create a new campaign
      *
      * @param array $campaignData The campaign data (see JS SDK CreateCampaignData for fields). Optional

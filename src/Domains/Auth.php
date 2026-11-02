@@ -274,7 +274,8 @@ class Auth
      * /Settings/Security with a single-use `pendingReauth` (the session that started it redeems it with confirmOAuthReauth) or `reauthError` (reauth_wrong_account,
      * reauth_unsupported, reauth_stale, invalid_state, sso_not_configured, access_denied or provider_error).
      *
-     * @param string $provider "google", "microsoft", "apple" or "sso"; must be linked to the account
+     * @param string $provider "microsoft", "apple" or "sso"; must be linked to the account. Google is
+     *   refused with a 400 because it can't confirm a fresh sign-in; confirm with a code instead
      * @param array $options Additional request options
      * @return array The response from the server (['reauthTicket' => ..., 'reauthSecret' => ..., 'expiresInSeconds' => ...]).
      *   Keep reauthSecret in the client that started the flow: it is returned only here, and confirmOAuthReauth needs it
@@ -329,7 +330,7 @@ class Auth
 
     /**
      * Unlink a provider from the caller's account. Refused (400) when it is the account's only way
-     * to sign in. Requires a fresh confirmTwoFactorIdentity from the same session.
+     * to sign in. With 2FA on and no password, the last linked Microsoft, Apple or SSO sign-in is refused (400) too. Requires a fresh confirmTwoFactorIdentity from the same session.
      *
      * @param string $provider "google", "microsoft", "apple" or "sso"
      * @param array $options Additional request options

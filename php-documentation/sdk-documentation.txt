@@ -122,7 +122,7 @@ AUTH  ($signalHouse->auth)
 
   createOAuthReauth(string $provider, ?array $options)
     Start signing in again with a provider linked to the caller's account
-    ("google", "microsoft", "apple" or "sso"), to confirm it's them. Sends a
+    ("microsoft", "apple" or "sso"; Google is refused with 400), to confirm it's them. Sends a
     POST to /auth/oauth/:provider/reauth (no body). Spends nothing.
     Returns { reauthTicket, reauthSecret, expiresInSeconds } (keep reauthSecret for the confirm call); pass reauthTicket to
     getOAuthAuthorizationUrl. The browser comes back to /Settings/Security
