@@ -164,6 +164,22 @@ trait TemplatePayloads
     }
 
     /**
+     * Build the address lookup query string
+     *
+     * @param array $params groupId, address
+     * @return string The query string
+     * @throws ValidationException If groupId or address is missing
+     */
+    protected function geocodeQuery(array $params): string
+    {
+        $this->client->require(['groupId' => $params['groupId'] ?? null, 'address' => $params['address'] ?? null]);
+        return $this->client->getQueryString([
+            'groupId' => $params['groupId'],
+            'address' => $params['address'],
+        ]);
+    }
+
+    /**
      * Validate and build the multipart parts: file (named fileName, else "upload", so a stream is still sent as a file) and groupId
      *
      * @param array $params groupId, file (a file path or an open resource/stream), fileName?

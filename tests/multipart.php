@@ -13,6 +13,7 @@ use SignalHouse\SDK\Domains\Campaigns;
 use SignalHouse\SDK\Domains\Landings;
 use SignalHouse\SDK\Domains\Messages;
 use SignalHouse\SDK\Domains\Numbers;
+use SignalHouse\SDK\Domains\Rcs;
 use SignalHouse\SDK\Domains\Templates;
 use SignalHouse\SDK\HttpClient;
 
@@ -47,6 +48,7 @@ $cases = [
     'createLanding' => [fn () => (new Landings($client, $multipartClient, false))->createLanding(['brandId' => 'B1'], $image), '/landing', ['file', 'brandId']],
     'updateLanding' => [fn () => (new Landings($client, $multipartClient, false))->updateLanding('L1', ['title' => 'T'], $image), '/landing/L1', ['file', 'title']],
     'templatesUploadMedia' => [fn () => (new Templates($client, $multipartClient, false))->uploadMedia(['groupId' => 'G1', 'file' => $image]), '/template/media', ['file', 'groupId']],
+    'rcsAgentsUploadAsset' => [fn () => (new Rcs($client, $multipartClient))->agents->uploadAsset('RCSA7K2M1QZ8RP', ['kind' => 'logo', 'file' => $image]), '/rcs/agent/RCSA7K2M1QZ8RP/asset', ['kind', 'file']],
 ];
 
 foreach ($cases as $name => [$call, $path, $fields]) {

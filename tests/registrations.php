@@ -186,49 +186,36 @@ check(end($client->calls)[0] === '/number?groupId=G1&currentTollFreeCarrier=fals
 $numbers->getPhoneNumbers(['groupId' => 'G1', 'currentTollFreeCarrier' => null]);
 check(end($client->calls)[0] === '/number?groupId=G1', 'phone numbers leave out an unset currentTollFreeCarrier');
 
-// A given subgroup goes into the business verification's subgroupId query parameter, never the body.
+// A group's toll-free requirements are read on the group's own escaped path, with no body.
 $brands = new \SignalHouse\SDK\Domains\Brands($client, $client, true);
-$brands->getBusinessVerifications('G/1', 'S0000001', ['token' => 'test-token']);
+$brands->getTollFreeRequirements('G/1', ['token' => 'test-token']);
 [$url, $options] = end($client->calls);
-check($url === '/brand/business-verification/G%2F1?subgroupId=S0000001' && $options['method'] === 'GET' && !isset($options['body']) && $options['token'] === 'test-token', 'subgroup business verification list');
-$details = ['businessName' => 'Acme Inc', 'registrationType' => 'EIN', 'registrationNumber' => '12-3456789'];
-$brands->createBusinessVerification('G/1', $details, 'S0000001', ['idempotencyKey' => 'key-1']);
-[$url, $options] = end($client->calls);
-check($url === '/brand/business-verification/G%2F1?subgroupId=S0000001' && $options['method'] === 'POST' && $options['body'] === $details && $options['idempotencyKey'] === 'key-1', 'subgroup business verification create');
-$brands->getBusinessVerifications('G1', subgroupId: 'S&1 2');
-check(end($client->calls)[0] === '/brand/business-verification/G1?subgroupId=S%261+2', 'subgroup escaped as a query value');
-// Without a subgroup both URLs stay exactly as they were.
-$brands->getBusinessVerifications('G1');
-check(end($client->calls)[0] === '/brand/business-verification/G1', 'business verification list without a subgroup');
-$brands->getBusinessVerifications('G1', subgroupId: null);
-check(end($client->calls)[0] === '/brand/business-verification/G1', 'business verification list with a null subgroup');
-$brands->createBusinessVerification('G1', $details);
-[$url, $options] = end($client->calls);
-check($url === '/brand/business-verification/G1' && $options['method'] === 'POST' && $options['body'] === $details, 'business verification create without a subgroup');
-
-// One business verification is read and updated on its own path under the group's.
-$brands->getBusinessVerification('G/1', 'BV/1', ['token' => 'test-token']);
-[$url, $options] = end($client->calls);
-check($url === '/brand/business-verification/G%2F1/BV%2F1' && $options['method'] === 'GET' && !isset($options['body']) && $options['token'] === 'test-token', 'business verification read');
-$brands->updateBusinessVerification('G/1', 'BV/1', $details, ['idempotencyKey' => 'key-1']);
-[$url, $options] = end($client->calls);
-check($url === '/brand/business-verification/G%2F1/BV%2F1' && $options['method'] === 'PUT' && $options['body'] === $details && $options['idempotencyKey'] === 'key-1', 'business verification update');
-check(!method_exists($brands, 'submitBusinessVerification'), 'submitBusinessVerification is gone');
+check($url === '/brand/toll-free-requirements/G%2F1' && $options['method'] === 'GET' && !isset($options['body']) && $options['token'] === 'test-token', 'toll-free requirements read');
 $sent = count($client->calls);
-$refusals = [
-    'groupId' => [fn () => $brands->getBusinessVerification('', 'BV1'), fn () => $brands->updateBusinessVerification('', 'BV1', $details)],
-    'businessVerificationId' => [fn () => $brands->getBusinessVerification('G1', ''), fn () => $brands->updateBusinessVerification('G1', '', $details)],
-];
-foreach ($refusals as $field => $calls) {
-    foreach ($calls as $call) {
-        try {
-            $call();
-            throw new RuntimeException("a business verification call accepted a missing $field");
-        } catch (\SignalHouse\SDK\Exceptions\ValidationException $error) {
-            check($error->getMessage() === "Missing required parameter: $field", "business verification calls name the missing $field");
-        }
-    }
+try {
+    $brands->getTollFreeRequirements('');
+    throw new RuntimeException('the toll-free requirements read accepted a missing groupId');
+} catch (\SignalHouse\SDK\Exceptions\ValidationException $error) {
+    check($error->getMessage() === 'Missing required parameter: groupId', 'the toll-free requirements read names the missing groupId');
 }
-check(count($client->calls) === $sent, 'refused business verification calls send nothing');
+check(count($client->calls) === $sent, 'a refused toll-free requirements read sends nothing');
 
-echo "Registration PHP contracts passed (7 regional reads, filter options, catalog, quotes, registrations, alphanumeric submission, opt-out links, staff namespace, validation, business verifications)\n";
+// A toll-free brand's five business details are sent as given, with the rest of the brand.
+$tollFreeBrand = [
+    'subgroupId' => 'S0000001', 'displayName' => 'Acme', 'companyName' => 'Acme Inc', 'street' => '1 Main St',
+    'city' => 'Springfield', 'state' => 'IL', 'postalCode' => '62701', 'email' => 'support@acme.example',
+    'firstName' => 'Jane', 'lastName' => 'Doe', 'website' => 'https://acme.example',
+    'tollFree' => [
+        'businessRegistrationType' => 'EIN', 'legalEntityType' => 'PRIVATE_COMPANY', 'taxId' => '12-3456789',
+        'countryCode' => 'US', 'supportPhone' => '17025550100', 'businessStructure' => 'CORPORATION',
+        'industry' => 'RETAIL', 'contactEmail' => 'jane@acme.example', 'contactJobTitle' => 'Owner', 'contactJobLevel' => 'CEO',
+    ],
+];
+$brands->createTollFreeBrand($tollFreeBrand, ['idempotencyKey' => 'key-1']);
+[$url, $options] = end($client->calls);
+check($url === '/brand/toll-free' && $options['method'] === 'POST' && $options['body'] === $tollFreeBrand && $options['idempotencyKey'] === 'key-1', 'toll-free brand create sends the five business details');
+foreach (['submitBusinessVerification', 'getBusinessVerifications', 'getBusinessVerification', 'createBusinessVerification', 'updateBusinessVerification'] as $method) {
+    check(!method_exists($brands, $method), "$method is gone");
+}
+
+echo "Registration PHP contracts passed (7 regional reads, filter options, catalog, quotes, registrations, alphanumeric submission, opt-out links, staff namespace, validation, toll-free brands)\n";

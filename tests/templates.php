@@ -39,7 +39,7 @@ function throws(string $class, callable $call): bool
 }
 
 $body = [
-    'channel' => 'rcs', 'contentFormat' => 'rcs.blocks.v1',
+    'channel' => 'rcs', 'contentFormat' => 'content.v1',
     'content' => ['blocks' => [['id' => 'b1', 'kind' => 'text', 'text' => 'Hi {{first_name}}']]],
     'variables' => [['key' => 'first_name', 'type' => 'text', 'required' => true]],
     'defaults' => (object) [], 'fallback' => (object) [],
@@ -98,6 +98,9 @@ check(throws(SignalHouseException::class, fn () => $templates->validate('TPL1', 
 check(throws(SignalHouseException::class, fn () => $templates->validate('TPL1', ['groupId' => 'G1', 'body' => $body, 'version' => 1])), 'validate rejects both');
 $templates->capabilities(['groupId' => 'G1', 'channel' => 'rcs', 'provider' => 'sinch']);
 check(end($client->calls)[0] === '/template/capabilities?groupId=G1&channel=rcs&provider=sinch', 'capabilities');
+$templates->geocodeAddress(['groupId' => 'G1', 'address' => 'Chicago']);
+check(end($client->calls)[0] === '/template/geocode?groupId=G1&address=Chicago' && end($client->calls)[1]['method'] === 'GET', 'geocode');
+check(throws(SignalHouseException::class, fn () => $templates->geocodeAddress(['groupId' => 'G1'])), 'geocode needs an address');
 
 $stream = fopen('php://memory', 'r+');
 fwrite($stream, "\x89PNG");

@@ -194,6 +194,24 @@ class Templates
     }
 
     /**
+     * Resolve an address to coordinates for a VIEW_LOCATION suggestion
+     *
+     * @param array $params groupId, address (1-512 characters)
+     * @param array $options Additional request options
+     * @return array The response whose data is ['address', 'latitude', 'longitude', 'partialMatch']; 400 with code
+     *     LOCATION_NOT_FOUND when nothing matches, 429 past the group's lookup window, 503 when the server has no
+     *     geocoding provider
+     * @throws ValidationException If groupId or address is missing
+     */
+    public function geocodeAddress(array $params, array $options = []): array
+    {
+        $queryString = $this->geocodeQuery($params);
+        return $this->client->request("/template/geocode{$queryString}", array_merge([
+            'method' => 'GET',
+        ], $options));
+    }
+
+    /**
      * Upload one media file for use in template bodies and get its public URL
      *
      * @param array $params groupId, file (a file path or an open resource/stream), fileName? (the part's filename)

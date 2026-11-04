@@ -167,7 +167,9 @@ class Registrations
      * Get a list of registrations with optional filters and pagination
      *
      * @param array $params Filter parameters (groupId, subgroupId, region, type, kind, status, parentRegistrationId,
-     *     phoneNumber, sortBy, sortOrder, page, limit). phoneNumber filters to registrations holding this phone number.
+     *     phoneNumber, brandId, campaignId, sortBy, sortOrder, page, limit). phoneNumber filters to registrations
+     *     holding this phone number. brandId and campaignId (RCS agents only) filter to agents linked to that 10DLC
+     *     brand (carrier ID, provisional UUID or _id) or campaign (campaign ID or _id).
      *     sortBy is createdAt (default), subgroupId, registrationId, region or status; sortOrder is asc or desc
      *     (default). kind is identity, program or sender. region filters by one jurisdiction or a list (array,
      *     sent as repeated keys). status filters by one registration status or a list (array, sent as repeated
@@ -203,9 +205,88 @@ class Registrations
     }
 
     /**
+     * Edit a draft, or a registration Signal House rejected, before submitting it (types that keep drafts, such as
+     * RCS_AGENT). For RCS_AGENT, agent and consent merge field by field, every other key replaces, and
+     * campaignId => null unlinks the campaign. 409 once submitted.
+     *
+     * @param string $registrationId The registration ID (e.g. RCSA7K2M1QZ8RP)
+     * @param array $data The fields to change, a partial of the type's create fields; sent as the request body
+     * @param array $options Additional request options
+     * @return array The response whose data is the updated registration
+     * @throws \SignalHouse\SDK\Exceptions\ValidationException If registrationId is missing
+     */
+    public function updateRegistration(string $registrationId, array $data, array $options = []): array
+    {
+        $this->client->require(['registrationId' => $registrationId]);
+        $safeRegistrationId = rawurlencode($registrationId);
+        return $this->client->request("/registration/{$safeRegistrationId}", array_merge([
+            'method' => 'PUT',
+            'body' => $data ?: (object) [],
+        ], $options));
+    }
+
+    /**
+     * Check a draft against every submit requirement and the live state of its links, without writing
+     *
+     * @param string $registrationId The registration ID (e.g. RCSA7K2M1QZ8RP)
+     * @param array $options Additional request options
+     * @return array The response whose data is ['valid', 'errors' => [['field', 'reason']], 'warnings' => [['field', 'reason']]]
+     * @throws \SignalHouse\SDK\Exceptions\ValidationException If registrationId is missing
+     */
+    public function validateRegistration(string $registrationId, array $options = []): array
+    {
+        $this->client->require(['registrationId' => $registrationId]);
+        $safeRegistrationId = rawurlencode($registrationId);
+        return $this->client->request("/registration/{$safeRegistrationId}/validate", array_merge([
+            'method' => 'POST',
+        ], $options));
+    }
+
+    /**
+     * Submit a draft. A type Signal House reviews goes to SIGNAL_HOUSE_REVIEW; a type it does not (RCS_AGENT) goes to
+     * SUBMITTING and is filed with the provider at once. A draft that fails a requirement gets a 400 whose details
+     * carry ['code' => 'REGISTRATION_INCOMPLETE', 'errors', 'warnings']; a second submit, or one of a registration the
+     * provider already holds, gets a 409.
+     *
+     * @param string $registrationId The registration ID (e.g. RCSA7K2M1QZ8RP)
+     * @param array $options Additional request options
+     * @return array The response whose data is the registration, now SIGNAL_HOUSE_REVIEW or SUBMITTING
+     * @throws \SignalHouse\SDK\Exceptions\ValidationException If registrationId is missing
+     */
+    public function submitRegistration(string $registrationId, array $options = []): array
+    {
+        $this->client->require(['registrationId' => $registrationId]);
+        $safeRegistrationId = rawurlencode($registrationId);
+        return $this->client->request("/registration/{$safeRegistrationId}/submit", array_merge([
+            'method' => 'POST',
+        ], $options));
+    }
+
+    /**
+     * Request the launch of a registration the provider already holds (an RCS agent in testing): the launch
+     * requirements are checked and the registration goes to SIGNAL_HOUSE_REVIEW, whose approval files the provider's
+     * launch request. Allowed while the provider reports the agent ready for testing, after a Signal House rejection,
+     * or after every carrier refused an earlier launch (409 otherwise); a failed requirement is a 400 whose details
+     * carry ['code' => 'REGISTRATION_INCOMPLETE', 'errors', 'warnings'].
+     *
+     * @param string $registrationId The registration ID (e.g. RCSA7K2M1QZ8RP)
+     * @param array $options Additional request options
+     * @return array The response whose data is the registration, now SIGNAL_HOUSE_REVIEW
+     * @throws \SignalHouse\SDK\Exceptions\ValidationException If registrationId is missing
+     */
+    public function launchRegistration(string $registrationId, array $options = []): array
+    {
+        $this->client->require(['registrationId' => $registrationId]);
+        $safeRegistrationId = rawurlencode($registrationId);
+        return $this->client->request("/registration/{$safeRegistrationId}/launch", array_merge([
+            'method' => 'POST',
+        ], $options));
+    }
+
+    /**
      * Cancel a registration. Allowed from SIGNAL_HOUSE_REVIEW, SIGNAL_HOUSE_APPROVED, PENDING_PROVIDER,
-     * NEEDS_INFORMATION, PAYMENT_REQUIRED and APPROVED (409 otherwise). Numbers already allocated stay on the
-     * account and stop sending.
+     * NEEDS_INFORMATION, PAYMENT_REQUIRED and APPROVED (409 otherwise), and for types that keep drafts also from
+     * DRAFT and SIGNAL_HOUSE_REJECTED. Numbers already allocated stay on the account and stop sending.
      *
      * @param string $registrationId The ID of the registration to cancel
      * @param array $options Additional request options

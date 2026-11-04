@@ -10,6 +10,7 @@ use SignalHouse\SDK\Domains\Campaigns;
 use SignalHouse\SDK\Domains\Groups;
 use SignalHouse\SDK\Domains\Landings;
 use SignalHouse\SDK\Domains\Templates;
+use SignalHouse\SDK\Domains\Rcs;
 use SignalHouse\SDK\Domains\Messages;
 use SignalHouse\SDK\Domains\Notifications;
 use SignalHouse\SDK\Domains\Numbers;
@@ -33,6 +34,7 @@ class SignalHouseSDK
     public Groups $groups;
     public Landings $landings;
     public Templates $templates;
+    public Rcs $rcs;
     public Messages $messages;
     public Notifications $notifications;
     public Numbers $numbers;
@@ -74,6 +76,7 @@ class SignalHouseSDK
         $this->groups = new Groups($client, $enableAdmin);
         $this->landings = new Landings($client, $multipartClient, $enableAdmin);
         $this->templates = new Templates($client, $multipartClient, $enableAdmin);
+        $this->rcs = new Rcs($client, $multipartClient);
         $this->messages = new Messages($client, $multipartClient, $enableAdmin);
         $this->notifications = new Notifications($client, $enableAdmin);
         $this->numbers = new Numbers($client, $multipartClient, $enableAdmin);

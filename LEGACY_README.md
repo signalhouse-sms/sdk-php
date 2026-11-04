@@ -57,13 +57,9 @@ $result = $sdk->messages->sendSMS(
 // Get brands
 $brands = $sdk->brands->getBrands(['groupId' => 'G12345678']);
 
-// List a group's business verifications; when required is true, a new toll-free brand names a
-// VERIFIED one as tollFree.businessVerificationId (createBusinessVerification adds one)
-$verifications = $sdk->brands->getBusinessVerifications('G12345678');
-
-// A group that verifies each subgroup's business separately names the subgroup, for both
-// getBusinessVerifications and createBusinessVerification
-$subgroupVerifications = $sdk->brands->getBusinessVerifications('G12345678', subgroupId: 'S1234567');
+// Check what a group's new toll-free brands need; when reviewsBusinessOnSubmit is true,
+// createTollFreeBrand also needs the business structure, industry and contact details
+$requirements = $sdk->brands->getTollFreeRequirements('G12345678');
 
 // Check wallet balance
 $wallet = $sdk->billing->getWallet('G12345678');
@@ -75,11 +71,12 @@ $wallet = $sdk->billing->getWallet('G12345678');
 |--------|-------------|
 | `$sdk->auth` | Authentication and login history |
 | `$sdk->billing` | Wallet, payment methods, transactions, invoices, fees |
-| `$sdk->brands` | 10DLC brand registration and management, toll-free business verification |
+| `$sdk->brands` | 10DLC and toll-free brand registration and management |
 | `$sdk->campaigns` | 10DLC campaign management |
 | `$sdk->groups` | Group management |
 | `$sdk->landings` | Landing page management (with file uploads) |
 | `$sdk->templates` | Versioned message templates: drafts, publish, archive, validate, capabilities, media upload |
+| `$sdk->rcs->agents` | RCS agents: drafts linked to a 10DLC brand and campaign, validate, submit, archive, logo/hero upload |
 | `$sdk->messages` | Send SMS/MMS/Group MMS, message logs, analytics |
 | `$sdk->notifications` | Notification management |
 | `$sdk->numbers` | Phone number search, purchase, assign, release, transfer |

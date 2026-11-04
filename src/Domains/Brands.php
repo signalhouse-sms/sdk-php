@@ -26,6 +26,11 @@ class Brands
     /**
      * Get a list of brands with optional filters
      *
+     * A toll-free brand's tollFree holds reviewsBusinessOnSubmit: whether the brand is reviewed when it's
+     * submitted and keeps its business details from then on. A brand reviewed on submit also holds
+     * businessStructure, industry, contactEmail, contactJobTitle, contactJobLevel and rejectionReason (why the
+     * brand was rejected, in plain English, or null) in its tollFree.
+     *
      * @param array $params Filter parameters (id, subgroupId, groupId, page, limit, status, registrationType, currentTollFreeCarrier).
     *                      id is a brand lookup id. registrationType filters by "TEN_DLC", "TOLL_FREE", or "SHORT_CODE".
      *                      currentTollFreeCarrier (bool), with groupId or subgroupId: when true, return only the
@@ -84,13 +89,23 @@ class Brands
      * supportPhone must be E.164 with an optional leading '+' and no spaces, parentheses or
      * hyphens (e.g. '17025550100').
      *
-     * tollFree.businessVerificationId names the business verification the brand uses (starts with BV). A
-     * group whose toll-free brands need a business verification must send a VERIFIED one of the brand's group
-     * (in a group that verifies each subgroup's business separately, of the brand's subgroup); any other group
-     * gets 400 if it sends one. With it, the legal fields (companyName, street, city, state, postalCode,
-     * country, firstName, lastName and tollFree's businessRegistrationType, taxId, countryCode and
-     * taxIdIssuingCountry) are optional: the business verification's values replace any that are sent. It
-     * can't be changed after creation.
+     * A group whose toll-free brands are reviewed on submit (see getTollFreeRequirements) must also send five
+     * business details under $brandData['tollFree']: businessStructure (CO_OPERATIVE, CORPORATION,
+     * LIMITED_LIABILITY_CORPORATION, NON_PROFIT_CORPORATION or PARTNERSHIP), industry (AGRICULTURE,
+     * AUTOMOTIVE, BANKING, CONSTRUCTION, CONSUMER, EDUCATION, ELECTRONICS, ENGINEERING, ENERGY,
+     * FAST_MOVING_CONSUMER_GOODS, FINANCIAL, FINTECH, FOOD_AND_BEVERAGE, GOVERNMENT, HEALTHCARE, HOSPITALITY,
+     * INSURANCE, JEWELRY, LEGAL, MANUFACTURING, MEDIA, NOT_FOR_PROFIT, OIL_AND_GAS, ONLINE,
+     * PROFESSIONAL_SERVICES, RAW_MATERIALS, REAL_ESTATE, RELIGION, RETAIL, TECHNOLOGY, TELECOMMUNICATIONS,
+     * TRANSPORTATION or TRAVEL), contactEmail (a valid email, at most 100 characters), contactJobTitle (at
+     * most 100 characters) and contactJobLevel (DIRECTOR, GM, VP, CEO, CFO, GENERAL_COUNSEL or OTHER). Its
+     * tollFree.countryCode must then be 'US' or 'CA' and its state a 2-letter state or province code. Any
+     * other group gets 400 if it sends one of the five.
+     *
+     * Such a brand stays DCA_PENDING until it is reviewed, usually 1–2 business days, then becomes DCA_ACTIVE,
+     * or DCA_REJECTED with tollFree.rejectionReason saying why; a rejected brand is fixed by creating it again
+     * with the corrections. Its business details (companyName, street, city, state, postalCode, country,
+     * firstName, lastName, tollFree's businessRegistrationType, taxId, countryCode and taxIdIssuingCountry,
+     * and the five above) can't be changed after it is submitted.
      *
      * @param array $brandData The toll-free brand data (see JS SDK CreateTollFreeBrandData for fields)
      * @param array $options Additional request options
@@ -107,113 +122,26 @@ class Brands
     }
 
     /**
-     * List a group's business verifications, newest first, and whether its toll-free brands need one.
+     * Get the toll-free brand requirements for a specific group
      *
-     * The response data holds groupId, required (whether the group's new toll-free brands need a business
-     * verification) and businessVerifications, newest first. Each has businessVerificationId, groupId,
-     * status (SUBMITTING, IN_REVIEW, VERIFIED or NEEDS_CHANGES), details, submittedAt, reviewedAt and
-     * rejectionReason (why it needs changes, or null).
+     * The response data holds groupId and reviewsBusinessOnSubmit. When reviewsBusinessOnSubmit is true, the
+     * group's new toll-free brands are reviewed when they're submitted: createTollFreeBrand needs the five
+     * business details under tollFree (businessStructure, industry, contactEmail, contactJobTitle and
+     * contactJobLevel), a 'US' or 'CA' tollFree.countryCode and a 2-letter state or province code; the brand
+     * stays DCA_PENDING until it is reviewed; and its business details can't be changed after it is
+     * submitted. The caller must be able to view the group (403 otherwise).
      *
-     * Some groups verify each subgroup's business separately: a platform whose subgroups are separate
-     * businesses, set up by Signal House. For those groups $subgroupId is required (400 without it), and
-     * the response data and each business verification also hold subgroupId, the subgroup whose business
-     * it describes. Any other group's business verifications cover all its subgroups, so a $subgroupId is
-     * only checked to be in the group. A subgroup outside the group answers 404.
-     *
-     * @param string $groupId The ID of the group whose business verifications to list
-     * @param string|null $subgroupId The subgroup whose business verifications to list; required for a group
-     *     that verifies each subgroup's business separately. Sent as a query parameter only when given
+     * @param string $groupId The ID of the group
      * @param array $options Additional request options
      * @return array The response from the server
      * @throws \SignalHouse\SDK\Exceptions\ValidationException If groupId is missing
      */
-    public function getBusinessVerifications(string $groupId, ?string $subgroupId = null, array $options = []): array
+    public function getTollFreeRequirements(string $groupId, array $options = []): array
     {
         $this->client->require(['groupId' => $groupId]);
         $safeGroupId = rawurlencode($groupId);
-        $queryString = $this->client->getQueryString(['subgroupId' => $subgroupId]);
-        return $this->client->request("/brand/business-verification/{$safeGroupId}{$queryString}", array_merge([
+        return $this->client->request("/brand/toll-free-requirements/{$safeGroupId}", array_merge([
             'method' => 'GET',
-        ], $options));
-    }
-
-    /**
-     * Get one of a group's business verifications by its ID.
-     *
-     * The response data holds the business verification, as getBusinessVerifications lists it, plus
-     * required. A business verification that isn't one of the group's answers 404.
-     *
-     * @param string $groupId The ID of the group the business verification belongs to
-     * @param string $businessVerificationId The ID of the business verification to get (starts with BV)
-     * @param array $options Additional request options
-     * @return array The response from the server
-     * @throws \SignalHouse\SDK\Exceptions\ValidationException If groupId or businessVerificationId is missing
-     */
-    public function getBusinessVerification(string $groupId, string $businessVerificationId, array $options = []): array
-    {
-        $this->client->require(['groupId' => $groupId, 'businessVerificationId' => $businessVerificationId]);
-        $safeGroupId = rawurlencode($groupId);
-        $safeBusinessVerificationId = rawurlencode($businessVerificationId);
-        return $this->client->request("/brand/business-verification/{$safeGroupId}/{$safeBusinessVerificationId}", array_merge([
-            'method' => 'GET',
-        ], $options));
-    }
-
-    /**
-     * Create and submit a new business verification. Review usually takes 1–2 business days; once it is
-     * VERIFIED, a new toll-free brand uses it by sending its ID as tollFree.businessVerificationId (see
-     * createTollFreeBrand).
-     *
-     * $details keys: businessName, businessType, industry, registrationType, registrationNumber, website,
-     * street, optional street2, city, state (2-letter state or province code), postalCode, country ('US'
-     * or 'CA') and representative (firstName, lastName, email, phone, jobTitle, jobLevel).
-     * representative.phone must be E.164 with an optional leading '+' and no spaces, parentheses or
-     * hyphens (e.g. '+17025550100').
-     *
-     * A group that verifies each subgroup's business separately (see getBusinessVerifications) must pass
-     * $subgroupId (400 without it), and only that subgroup's toll-free brands can use the business
-     * verification. A given $subgroupId must be in the group (404 otherwise) and active (400 otherwise). A
-     * group whose toll-free brands don't need a business verification answers 400.
-     *
-     * @param string $groupId The ID of the group the business verification is for (the caller's active group)
-     * @param array $details The business verification details (see JS SDK BusinessVerificationDetails for fields)
-     * @param string|null $subgroupId The subgroup whose business it verifies; required for a group that
-     *     verifies each subgroup's business separately. Sent as a query parameter only when given
-     * @param array $options Additional request options
-     * @return array The response from the server: a 202 with the new business verification, now SUBMITTING
-     * @throws \SignalHouse\SDK\Exceptions\ValidationException If groupId or details is missing
-     */
-    public function createBusinessVerification(string $groupId, array $details, ?string $subgroupId = null, array $options = []): array
-    {
-        $this->client->require(['groupId' => $groupId, 'details' => $details]);
-        $safeGroupId = rawurlencode($groupId);
-        $queryString = $this->client->getQueryString(['subgroupId' => $subgroupId]);
-        return $this->client->request("/brand/business-verification/{$safeGroupId}{$queryString}", array_merge([
-            'method' => 'POST',
-            'body' => $details,
-        ], $options));
-    }
-
-    /**
-     * Correct and resubmit a business verification. Allowed only while its status is NEEDS_CHANGES (400
-     * otherwise). Review usually takes 1–2 business days; the toll-free brands that use it stay pending
-     * until it is verified. A business verification that isn't one of the group's answers 404.
-     *
-     * @param string $groupId The ID of the group the business verification belongs to (the caller's active group)
-     * @param string $businessVerificationId The ID of the business verification to update (starts with BV)
-     * @param array $details The corrected business verification details, with the same keys as createBusinessVerification
-     * @param array $options Additional request options
-     * @return array The response from the server: a 202 with the business verification, now SUBMITTING
-     * @throws \SignalHouse\SDK\Exceptions\ValidationException If groupId, businessVerificationId or details is missing
-     */
-    public function updateBusinessVerification(string $groupId, string $businessVerificationId, array $details, array $options = []): array
-    {
-        $this->client->require(['groupId' => $groupId, 'businessVerificationId' => $businessVerificationId, 'details' => $details]);
-        $safeGroupId = rawurlencode($groupId);
-        $safeBusinessVerificationId = rawurlencode($businessVerificationId);
-        return $this->client->request("/brand/business-verification/{$safeGroupId}/{$safeBusinessVerificationId}", array_merge([
-            'method' => 'PUT',
-            'body' => $details,
         ], $options));
     }
 
