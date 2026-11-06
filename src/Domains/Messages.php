@@ -60,7 +60,7 @@ class Messages
      *
      * @param array $params Filter parameters. messageType accepts a single value or array; allowed
      *     values are SMS, MMS, RCS, WHATSAPP, VIBER, and P2P. channel accepts "tenDLC", "virtualLongCode",
-     *     "tollFree", "shortCode", or "p2p" as a single value or array. Older messages without
+     *     "tollFree", "shortCode", "p2p", or "rcs" as a single value or array. Older messages without
      *     a stored channel count as tenDLC. sentimentLabel filters by sentiment bucket and accepts
      *     "positive", "neutral", or "negative" as a single value or array; it is applied as the
      *     sentimentScore range the label threshold produces, so unscored messages match no bucket and
@@ -80,6 +80,10 @@ class Messages
      *     regionScopes is an array of OR-ed branches ['region', 'channels', 'brandId'?, 'campaignId'?,
      *     'phoneNumber'?] (channels: tenDLC, virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for
      *     the query; a string is sent as-is and [] matches nothing.
+     *     RCS filters: templateId?, templateVersion?, bulkId? (the messages of one send), fallbackReason?
+     *     (NOT_CAPABLE, CARRIER_NOT_LAUNCHED, TTL_EXPIRED, RCS_ERROR, PROVIDER_ERROR or SMS_ONLY),
+     *     billingClass? (RICH or RICH_MEDIA), deliveredChannel? (rcs, sms or mms) and isTest? (true for test
+     *     messages only, false to leave them out).
      * @param array $options Additional request options
      * @return array The response from the server. Inbound messages also carry sentimentScore
      *     (-100..100, null when unscored), sentimentLabel ("positive", "neutral" or "negative",
@@ -94,6 +98,22 @@ class Messages
     }
 
     /**
+     * Get one message of any type by its ID
+     *
+     * @param string $id The message ID
+     * @param array $options Additional request options
+     * @return array The response whose data is the message; an unknown ID is a 404
+     */
+    public function getMessage(string $id, array $options = []): array
+    {
+        $this->client->require(['id' => $id]);
+        $safeId = rawurlencode($id);
+        return $this->client->request("/message/{$safeId}", array_merge([
+            'method' => 'GET',
+        ], $options));
+    }
+
+    /**
      * Get aggregated analytics for messages with optional filters
      *
      * @param array $params Filter parameters. channel accepts "tenDLC", "virtualLongCode", "tollFree", "shortCode",
@@ -101,21 +121,19 @@ class Messages
      *     channel; p2p is matched by carrier. subgroupId, brandId, campaignId, phoneNumber and
      *     carrier each accept a single value, an array, or a comma-separated string; groupId is
      *     single-valued.
-     *     registrationId filters to traffic attributed to these registrations (hourly analytics only;
-     *     a 400 while hourly reads are off); single value or array. A phoneNumber filter takes precedence.
+     *     registrationId filters to traffic attributed to these registrations; single value or array. A phoneNumber filter takes precedence.
      *     messageType scopes the SENTIMENT figures to SMS, MMS or P2P (single value, array, or
      *     comma-separated string); omit for all scored types. It does NOT narrow the message counts,
      *     which are always returned split per type.
      *     carrierFamily filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics);
-     *     single value, array, or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
+     *     single value, array, or comma-separated string.
      *     dateBounds is which contract binds startDate/endDate. "day": each bound is widened to its
      *     whole UTC day. "exact": a timestamp is bound as the instant it
      *     names and a bare date is its whole UTC day. Omitted: "day".
      *     region filters by "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB) as a single value or array.
      *     regionScopes is an array of OR-ed branches ['region', 'channels', 'brandId'?, 'campaignId'?,
      *     'phoneNumber'?] (channels: tenDLC, virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for
-     *     the query; a string is sent as-is and [] matches nothing. Both are accepted only where the
-     *     environment serves hourly analytics; elsewhere any value is rejected with a 400.
+     *     the query; a string is sent as-is and [] matches nothing.
      * @param array $options Additional request options
      * @return array The response from the server. Also includes inbound-message sentiment for the
      *     requested scope: sentimentScore (volume-weighted average of every scored inbound message
@@ -139,30 +157,26 @@ class Messages
      *     channel; p2p is a first-class channel. subgroupId, brandId, campaignId, phoneNumber and
      *     carrier each accept a single value, an array, or a comma-separated string; groupId is
      *     single-valued.
-     *     registrationId filters to traffic attributed to these registrations (hourly analytics only;
-     *     a 400 while hourly reads are off); single value or array. A phoneNumber filter takes precedence.
+     *     registrationId filters to traffic attributed to these registrations; single value or array. A phoneNumber filter takes precedence.
      *     messageType scopes the SENTIMENT figures to SMS, MMS or P2P (single value, array, or
      *     comma-separated string); omit for all scored types. It does NOT narrow the message counts,
      *     which are always returned split per type.
      *     carrierFamily filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics);
-     *     single value, array, or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
+     *     single value, array, or comma-separated string.
      *     granularity ("day" | "hour") is the time-bucket grain of the byDate rows. Omit for day (each
      *     row's _id is a "YYYY-MM-DD" date). "hour" buckets by hour (each row's _id is a
      *     "YYYY-MM-DD HH:MM:SS" UTC hour; startDate is floored to its hour and endDate honoured as
-     *     given) and is capped to a 7-day span. Only accepted where the environment serves hourly
-     *     analytics; elsewhere any value, including "day", is rejected with a 400 -- omit it unless
-     *     hour grain is wanted.
+     *     given) and is capped to a 7-day span.
      *     breakdown ("carrier" | "carrierFamily") adds a byBreakdown time × dimension series to the
      *     response ({dimension, rows}: each row is one byDate bucket (_id) for one carrier or carrier
-     *     family (key), top 50 keys by volume, excluding P2P) and caps the span at 31 days. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
+     *     family (key), top 50 keys by volume, excluding P2P) and caps the span at 31 days.
      *     dateBounds is which contract binds startDate/endDate. "day": each bound is widened to its
      *     whole UTC day. "exact": a timestamp is bound as the instant it
      *     names and a bare date is its whole UTC day. Omitted: "day".
      *     region filters by "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB) as a single value or array.
      *     regionScopes is an array of OR-ed branches ['region', 'channels', 'brandId'?, 'campaignId'?,
      *     'phoneNumber'?] (channels: tenDLC, virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for
-     *     the query; a string is sent as-is and [] matches nothing. Both are accepted only where the
-     *     environment serves hourly analytics; elsewhere any value is rejected with a 400.
+     *     the query; a string is sent as-is and [] matches nothing.
      * @param array $options Additional request options
      * @return array The response from the server with an array of analytics snapshot records.
      *     cardTotals and every byDate/byPhoneNumber/byCarrier row also carry that row's own
@@ -183,12 +197,11 @@ class Messages
      * Get per-minute send throughput (peak segments per minute, sending minutes, minutes at a
      * ceiling) per time bucket and per carrier family. Measured from SENT transitions at
      * campaign x carrier-family grain -- the grain carrier ceilings are enforced at -- so a peak
-     * here is the figure a ceiling is compared against. Only accepted where the environment serves
-     * hourly analytics; elsewhere the request is rejected with a 400.
+     * here is the figure a ceiling is compared against.
      *
      * @param array $params Query parameters: groupId (required), brandId, campaignId (wins over
      *     brandId; single value, array, or comma-separated string), registrationId (filter to traffic
-     *     attributed to these registrations (hourly analytics only; a 400 while hourly reads are off);
+     *     attributed to these registrations;
      *     single value or array), carrierFamily (ATT, TMobile,
      *     Verizon, USCellular, ...; single value, array, or comma-separated string), startDate and
      *     endDate (required, ISO-8601; both are bound per dateBounds, a bare date being its whole UTC day
@@ -220,8 +233,7 @@ class Messages
      * at least one message are returned.
      *
      * @param array $params Filter parameters (groupId required). region restricts the options to "US", "GB",
-     *     or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB) as a single value or array; only accepted where the environment
-     *     serves hourly analytics, elsewhere any value is rejected with a 400.
+     *     or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB) as a single value or array.
      * @param array $options Additional request options
      * @return array The response with subgroups, brands, campaigns, phoneNumbers, and carriers arrays. Each phone
      *     number carries type (TOLL_FREE, SHORT_CODE, ALPHANUMERIC, VIRTUAL_LONG_NUMBER, ...) and country
@@ -248,17 +260,15 @@ class Messages
      *     sentiment figures (SMS, MMS or P2P, single value or array); omit for all scored types. It
      *     does not narrow the message counts, which are always returned split per type.
      *     carrierFamily filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics);
-     *     single value, array, or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
-     *     registrationId filters to traffic attributed to these registrations (hourly analytics only;
-     *     a 400 while hourly reads are off); single value or array. A phoneNumber filter takes precedence.
+     *     single value, array, or comma-separated string.
+     *     registrationId filters to traffic attributed to these registrations; single value or array. A phoneNumber filter takes precedence.
      *     dateBounds is which contract binds startDate/endDate. "day": each bound is widened to its
      *     whole UTC day. "exact": a timestamp is bound as the instant it
      *     names and a bare date is its whole UTC day. Omitted: "day".
      *     region filters by "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB) as a single value or array.
      *     regionScopes is an array of OR-ed branches ['region', 'channels', 'brandId'?, 'campaignId'?,
      *     'phoneNumber'?] (channels: tenDLC, virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for
-     *     the query; a string is sent as-is and [] matches nothing. Both are accepted only where the
-     *     environment serves hourly analytics; elsewhere any value is rejected with a 400.
+     *     the query; a string is sent as-is and [] matches nothing.
      * @param array $options Additional request options
      * @return array { rows, totalCount, page, limit }. Each row carries that subgroup's
      *     inbound-message sentiment alongside its message counters: sentimentScore
@@ -283,17 +293,15 @@ class Messages
      *     code), "tenDLC", "virtualLongCode", "tollFree", "shortCode", or "p2p" as a single value or array. When one
      *     channel is selected, totalErrors reflects only that channel.
      *     carrierFamily filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics);
-     *     single value, array, or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
-     *     registrationId filters to traffic attributed to these registrations (hourly analytics only;
-     *     a 400 while hourly reads are off); single value or array. A phoneNumber filter takes precedence.
+     *     single value, array, or comma-separated string.
+     *     registrationId filters to traffic attributed to these registrations; single value or array. A phoneNumber filter takes precedence.
      *     dateBounds is which contract binds startDate/endDate. "day": each bound is widened to its
      *     whole UTC day. "exact": a timestamp is bound as the instant it
      *     names and a bare date is its whole UTC day. Omitted: "day".
      *     region filters by "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB) as a single value or array.
      *     regionScopes is an array of OR-ed branches ['region', 'channels', 'brandId'?, 'campaignId'?,
      *     'phoneNumber'?] (channels: tenDLC, virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for
-     *     the query; a string is sent as-is and [] matches nothing. Both are accepted only where the
-     *     environment serves hourly analytics; elsewhere any value is rejected with a 400.
+     *     the query; a string is sent as-is and [] matches nothing.
      *     errorCode narrows the breakdown to a single failure reason: a numeric Infobip carrier code
      *     (as a string, e.g. "607"), the Signal House campaign-opt-out code "OUT", or a no-code failure
      *     class (other, moderation, att_limit, p2p_stop, campaign_opt_out, dnc_blocked, bind_hold_expired).
@@ -315,16 +323,14 @@ class Messages
      * @param array $params Filter parameters. channel accepts "tenDLC", "virtualLongCode", "tollFree", or "shortCode"
      *     as a single value or array. Opt-outs are A2P-only, so "p2p" applies no scope; tenDLC also
      *     includes older opt-outs with no channel.
-     *     registrationId filters to traffic attributed to these registrations (hourly analytics only;
-     *     a 400 while hourly reads are off); single value or array. A phoneNumber filter takes precedence.
+     *     registrationId filters to traffic attributed to these registrations; single value or array. A phoneNumber filter takes precedence.
      *     dateBounds is which contract binds startDate/endDate. "day": each bound is widened to its
      *     whole UTC day. "exact": a timestamp is bound as the instant it
      *     names and a bare date is its whole UTC day. Omitted: "day".
      *     region filters by "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB) as a single value or array.
      *     regionScopes is an array of OR-ed branches ['region', 'channels', 'brandId'?, 'campaignId'?,
      *     'phoneNumber'?] (channels: tenDLC, virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for
-     *     the query; a string is sent as-is and [] matches nothing. Both are accepted only where the
-     *     environment serves hourly analytics; elsewhere any value is rejected with a 400.
+     *     the query; a string is sent as-is and [] matches nothing.
      * @param array $options Additional request options
      * @return array The response from the server with totals, byDate, byPhoneNumber, bySenderNumber,
      *     byCampaign, bySubgroup, byType, byCarrier, byKeyword. bySenderNumber ({senderPhoneNumber,
@@ -352,16 +358,14 @@ class Messages
      * @param array $params Filter parameters. channel accepts "tenDLC", "virtualLongCode", "tollFree", or "shortCode"
      *     as a single value or array. Opt-outs are A2P-only, so "p2p" applies no scope; tenDLC also
      *     includes older opt-outs with no channel.
-     *     registrationId filters to traffic attributed to these registrations (hourly analytics only;
-     *     a 400 while hourly reads are off); single value or array. A phoneNumber filter takes precedence.
+     *     registrationId filters to traffic attributed to these registrations; single value or array. A phoneNumber filter takes precedence.
      *     dateBounds is which contract binds startDate/endDate. "day": each bound is widened to its
      *     whole UTC day. "exact": a timestamp is bound as the instant it
      *     names and a bare date is its whole UTC day. Omitted: "day".
      *     region filters by "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB) as a single value or array.
      *     regionScopes is an array of OR-ed branches ['region', 'channels', 'brandId'?, 'campaignId'?,
      *     'phoneNumber'?] (channels: tenDLC, virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for
-     *     the query; a string is sent as-is and [] matches nothing. Both are accepted only where the
-     *     environment serves hourly analytics; elsewhere any value is rejected with a 400.
+     *     the query; a string is sent as-is and [] matches nothing.
      * @param array $options Additional request options
      * @return array The response from the server with paginated DNC records. Each record carries
      *     senderPhoneNumber — the first business number that received the opt-out (set once, never

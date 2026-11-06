@@ -30,7 +30,8 @@ class Templates
      * @param array $params groupId, name (1-120 chars, unique per group and channel), body (the raw template body, e.g. an
      *     RcsTemplateBody), tag? (1-60 chars)
      * @param array $options Additional request options
-     * @return array The response whose data is ['head', 'version'] (201)
+     * @return array The response whose data is ['head', 'version', 'validation'] (201). validation is ['valid', 'errors',
+     *     'warnings'], or null when the checks could not run; the draft saves even when it lists errors
      * @throws ValidationException If groupId, name or body is missing
      */
     public function create(array $params, array $options = []): array
@@ -85,7 +86,7 @@ class Templates
      *     replacement). Writes apply directly (last write wins); an archived template answers 409 TEMPLATE_ARCHIVED and a
      *     taken name 409 TEMPLATE_NAME_TAKEN
      * @param array $options Additional request options
-     * @return array The response whose data is ['head', 'version']
+     * @return array The response whose data is ['head', 'version', 'validation']; the draft saves even when validation lists errors
      * @throws ValidationException If templateId or groupId is missing
      */
     public function update(string $templateId, array $params, array $options = []): array
@@ -104,7 +105,7 @@ class Templates
      * @param string $templateId The template ID
      * @param array $params groupId
      * @param array $options Additional request options
-     * @return array The response whose data is ['head', 'version']; an incomplete draft answers 400 TEMPLATE_INVALID,
+     * @return array The response whose data is ['head', 'version', 'warnings']; an incomplete draft answers 400 TEMPLATE_INVALID,
      *     no draft 409 NO_DRAFT, a draft that changed while being published 409 DRAFT_CHANGED (publish again) and an
      *     archived template 409 TEMPLATE_ARCHIVED
      * @throws ValidationException If templateId or groupId is missing

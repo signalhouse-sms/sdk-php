@@ -168,7 +168,7 @@ class Registrations
      *
      * @param array $params Filter parameters (groupId, subgroupId, region, type, kind, status, parentRegistrationId,
      *     phoneNumber, brandId, campaignId, sortBy, sortOrder, page, limit). phoneNumber filters to registrations
-     *     holding this phone number. brandId and campaignId (RCS agents only) filter to agents linked to that 10DLC
+     *     holding this phone number. brandId and campaignId (RCS agents only) filter to agents linked to that
      *     brand (carrier ID, provisional UUID or _id) or campaign (campaign ID or _id).
      *     sortBy is createdAt (default), subgroupId, registrationId, region or status; sortOrder is asc or desc
      *     (default). kind is identity, program or sender. region filters by one jurisdiction or a list (array,
@@ -268,6 +268,7 @@ class Registrations
      * launch request. Allowed while the provider reports the agent ready for testing, after a Signal House rejection,
      * or after every carrier refused an earlier launch (409 otherwise); a failed requirement is a 400 whose details
      * carry ['code' => 'REGISTRATION_INCOMPLETE', 'errors', 'warnings'].
+     * An RCS agent's launch request charges its launch fees: a wallet that cannot cover them gets a 402, and nothing changes.
      *
      * @param string $registrationId The registration ID (e.g. RCSA7K2M1QZ8RP)
      * @param array $options Additional request options

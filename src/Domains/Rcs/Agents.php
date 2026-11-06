@@ -6,9 +6,9 @@ use SignalHouse\SDK\Exceptions\ValidationException;
 use SignalHouse\SDK\HttpClient;
 
 /**
- * RCS agents under /rcs/agent. An agent links one 10DLC brand and one 10DLC campaign: the campaign's numbers are the
- * SMS fallback, and the brand and campaign supply the company identity and consent text for the carrier launch. One
- * brand or campaign can serve many agents. An agent is a registration (type RCS_AGENT, id RCSA...), so the
+ * RCS agents under /rcs/agent. An agent links one brand and one campaign, of any registration type: the campaign's
+ * numbers are the SMS fallback, and the brand and campaign supply the company identity and consent text for the carrier
+ * launch. One brand or campaign can serve many agents. An agent is a registration (type RCS_AGENT, id RCSA...), so the
  * registrations methods read and edit the same record. 404 while the environment's RCS switch is off; 400 while the
  * group's rcsEnabled flag is off.
  *
@@ -44,7 +44,7 @@ class Agents
     }
 
     /**
-     * Create an agent draft on a 10DLC brand, optionally with its campaign. The agent's subgroup is the brand's.
+     * Create an agent draft on a brand, optionally with its campaign. The agent's subgroup is the brand's.
      * Blank consent fields fill from the linked campaign. Pass $options['idempotencyKey'] to make a retry safe.
      *
      * @param array $params brandId (carrier brand ID, provisional UUID or _id), campaignId? (a campaign ID or _id of
@@ -73,8 +73,8 @@ class Agents
      * List agents, newest first
      *
      * @param array $params groupId?, subgroupId?, status? (DRAFT, PENDING_REVIEW, REJECTED, AGENT_CREATING or
-     *     ARCHIVED; one value or an array, sent as repeated keys), brandId? (agents linked to this 10DLC brand),
-     *     campaignId? (agents linked to this 10DLC campaign), page? (default 1), limit? (default 25, max 100)
+     *     ARCHIVED; one value or an array, sent as repeated keys), brandId? (agents linked to this brand),
+     *     campaignId? (agents linked to this campaign), page? (default 1), limit? (default 25, max 100)
      * @param array $options Additional request options
      * @return array The response whose data is ['data' => agents, 'total', 'page', 'limit']
      */
@@ -117,7 +117,7 @@ class Agents
      * billingCategory once a launch was requested.
      *
      * @param string $agentId The agent ID
-     * @param array $params brandId? (relink to another 10DLC brand of the same subgroup), campaignId?, agent?,
+     * @param array $params brandId? (relink to another brand of the same subgroup), campaignId?, agent?,
      *     consent?, contact?, useCase?, billingCategory?, defaultFallback?, excludedCarriers?, testers?
      * @param array $options Additional request options
      * @return array The response whose data is the agent
@@ -176,6 +176,7 @@ class Agents
      * CARRIER_REJECTED (409 otherwise); a failed requirement is a 400 whose details carry ['code' =>
      * 'REGISTRATION_INCOMPLETE', 'errors', 'warnings']. Sends POST /registration/:agentId/launch: the agent is a
      * registration.
+     * The request charges the agent's launch fees: a wallet that cannot cover them gets a 402, and the agent stays where it is. The agent's launchFees quotes what the next request charges.
      *
      * @param string $agentId The agent ID
      * @param array $options Additional request options

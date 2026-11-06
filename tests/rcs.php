@@ -5,11 +5,15 @@ require __DIR__ . '/../src/Exceptions/SignalHouseException.php';
 require __DIR__ . '/../src/Exceptions/ValidationException.php';
 require __DIR__ . '/../src/HttpClient.php';
 require __DIR__ . '/../src/Domains/Rcs/Agents.php';
+require __DIR__ . '/../src/Domains/Rcs/Messages.php';
+require __DIR__ . '/../src/Domains/Messages.php';
 require __DIR__ . '/../src/Domains/Rcs.php';
 require __DIR__ . '/../src/Domains/Registrations.php';
 
 use SignalHouse\SDK\Domains\Rcs;
+use SignalHouse\SDK\Domains\Messages;
 use SignalHouse\SDK\Domains\Rcs\Agents;
+use SignalHouse\SDK\Domains\Rcs\Messages as RcsMessages;
 use SignalHouse\SDK\Domains\Registrations;
 use SignalHouse\SDK\Exceptions\ValidationException;
 
@@ -130,4 +134,73 @@ check(throws(\ArgumentCountError::class, fn () => $registrations->updateRegistra
 check(throws(ValidationException::class, fn () => $registrations->submitRegistration('')), 'submit requires registrationId');
 check(throws(ValidationException::class, fn () => $registrations->launchRegistration('')), 'launch requires registrationId');
 
-echo "RCS PHP contracts passed (agents create/list/get/update/validate/submit/archive, multipart asset upload, registration drafts and link filters)\n";
+$messages = $rcs->messages;
+check($messages instanceof RcsMessages, 'rcs exposes messages');
+$recipients = [['phoneNumber' => '+15125550199', 'variables' => ['name' => 'Ada']]];
+$fallback = ['mode' => 'auto', 'channel' => 'sms', 'from' => '15125550100', 'content' => ['text' => 'Hi'], 'validitySeconds' => 600];
+
+$messages->send([
+    'agentId' => AGENT, 'recipients' => $recipients, 'content' => ['blocks' => []], 'contentFormat' => 'content.v1',
+    'trafficType' => 'TRANSACTION', 'ttlSeconds' => 900, 'fallback' => $fallback, 'statusCallbackUrl' => 'https://example.com/cb',
+    'enableShortlink' => false, 'isTest' => true, 'simulate' => 'delivered', 'templateId' => null, 'groupId' => 'G1',
+], ['idempotencyKey' => 'k1']);
+[$url, $options] = end($client->calls);
+check($url === '/message/rcs' && $options['method'] === 'POST' && $options['idempotencyKey'] === 'k1', 'send');
+check($options['body'] === [
+    'agentId' => AGENT, 'recipients' => $recipients, 'content' => ['blocks' => []], 'contentFormat' => 'content.v1',
+    'trafficType' => 'TRANSACTION', 'ttlSeconds' => 900, 'fallback' => $fallback, 'statusCallbackUrl' => 'https://example.com/cb',
+    'enableShortlink' => false, 'isTest' => true, 'simulate' => 'delivered',
+], 'send body keeps false and omits null and unknown keys');
+$messages->send(['agentId' => AGENT, 'recipients' => $recipients, 'templateId' => 'T1', 'templateVersion' => 2, 'expireTime' => '2026-11-05T00:00:00Z', 'fallback' => []]);
+$body = end($client->calls)[1]['body'];
+check($body['templateVersion'] === 2 && $body['expireTime'] === '2026-11-05T00:00:00Z' && json_encode($body['fallback']) === '{}', 'send template body, empty fallback is an object');
+check(throws(ValidationException::class, fn () => $messages->send(['recipients' => $recipients])), 'send requires agentId');
+check(throws(ValidationException::class, fn () => $messages->send(['agentId' => AGENT])), 'send requires recipients');
+
+$messages->validate(['agentId' => AGENT, 'recipients' => $recipients, 'templateId' => 'T1', 'simulate' => 'read']);
+[$url, $options] = end($client->calls);
+check($url === '/message/rcs/validate' && $options['method'] === 'POST', 'validate');
+check($options['body'] === ['agentId' => AGENT, 'recipients' => $recipients, 'templateId' => 'T1', 'simulate' => 'read'], 'validate body');
+check(throws(ValidationException::class, fn () => $messages->validate(['agentId' => AGENT])), 'validate requires recipients');
+
+$messages->estimate(['agentId' => AGENT, 'recipientCount' => 500, 'templateId' => 'T1', 'templateVersion' => 2, 'trafficType' => 'PROMOTION', 'fallback' => ['mode' => 'rcs_only']]);
+[$url, $options] = end($client->calls);
+check($url === '/message/estimate' && $options['method'] === 'POST', 'estimate');
+check($options['body'] === ['channel' => 'rcs', 'agentId' => AGENT, 'recipientCount' => 500, 'templateId' => 'T1', 'templateVersion' => 2, 'trafficType' => 'PROMOTION', 'fallback' => ['mode' => 'rcs_only']], 'estimate adds the channel');
+check(throws(ValidationException::class, fn () => $messages->estimate(['recipientCount' => 500])), 'estimate requires agentId');
+
+$messages->capabilities(AGENT, ['+15125550199']);
+[$url, $options] = end($client->calls);
+check($url === '/rcs/capabilities' && $options['method'] === 'POST', 'capabilities');
+check($options['body'] === ['agentId' => AGENT, 'phoneNumbers' => ['+15125550199']], 'capabilities body');
+check(throws(ValidationException::class, fn () => $messages->capabilities('', ['+15125550199'])), 'capabilities requires agentId');
+check(throws(ValidationException::class, fn () => $messages->capabilities(AGENT, [])), 'capabilities requires phoneNumbers');
+
+$messages->get('a/1');
+[$url, $options] = end($client->calls);
+check($url === '/message/a%2F1' && $options['method'] === 'GET', 'get');
+check(throws(ValidationException::class, fn () => $messages->get('')), 'get requires messageId');
+
+$allMessages = new Messages($client, $multipart, false);
+$allMessages->getMessage('a/1');
+[$url, $options] = end($client->calls);
+check($url === '/message/a%2F1' && $options['method'] === 'GET', 'getMessage');
+check(throws(ValidationException::class, fn () => $allMessages->getMessage('')), 'getMessage requires id');
+
+$messages->list([
+    'agentId' => AGENT, 'from' => '2026-11-01', 'to' => '2026-11-02', 'groupId' => 'G1', 'status' => 'READ', 'page' => 2, 'limit' => 50,
+    'templateId' => 'T1', 'templateVersion' => 3, 'bulkId' => 'B1', 'fallbackReason' => 'NOT_CAPABLE', 'billingClass' => 'RICH_MEDIA',
+    'deliveredChannel' => 'sms', 'isTest' => false,
+]);
+[$url, $options] = end($client->calls);
+check($options['method'] === 'GET' && $url === '/message?registrationId=' . AGENT . '&startDate=2026-11-01&endDate=2026-11-02&groupId=G1&status=READ&page=2&limit=50&templateId=T1&templateVersion=3&bulkId=B1&fallbackReason=NOT_CAPABLE&billingClass=RICH_MEDIA&deliveredChannel=sms&isTest=false&messageType=RCS', 'list maps filters');
+$before = count($client->calls);
+check(throws(ValidationException::class, fn () => $messages->list(['from' => '2026-11-01', 'to' => '2026-11-02'])), 'list requires groupId');
+check(throws(ValidationException::class, fn () => $messages->list(['groupId' => 'G1', 'to' => '2026-11-02'])), 'list requires from');
+check(throws(ValidationException::class, fn () => $messages->list(['groupId' => 'G1', 'from' => '2026-11-01'])), 'list requires to');
+check(count($client->calls) === $before, 'list without a required field sends no request');
+
+$allMessages->getMessages(['groupId' => 'G1', 'startDate' => '2026-11-01', 'endDate' => '2026-11-02', 'bulkId' => 'B1', 'isTest' => false]);
+check(end($client->calls)[0] === '/message?groupId=G1&startDate=2026-11-01&endDate=2026-11-02&bulkId=B1&isTest=false', 'getMessages forwards the RCS filters');
+
+echo "RCS PHP contracts passed (agents create/list/get/update/validate/submit/archive, multipart asset upload, registration drafts and link filters, messages send/validate/estimate/capabilities/get/list, getMessage, getMessages)\n";
