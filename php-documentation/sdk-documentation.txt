@@ -474,10 +474,12 @@ NUMBERS  ($signalHouse->numbers)
   getPhoneNumbers(array $params = [], array $options = [])
     List your phone numbers with filters. $params keys: phoneNumber,
     campaignId, registrationId, brandId, subgroupId, groupId, page, limit,
-    currentTollFreeCarrier (bool).
+    currentTollFreeCarrier (bool), released (bool).
     registrationId: filter to numbers provisioned under this registration.
     currentTollFreeCarrier: with groupId or subgroupId, true returns only the
     toll-free numbers a new toll-free campaign in that group can use.
+    released: with subgroupId or groupId, true returns only its released
+    numbers (status RELEASED) instead of its active ones.
 
   getNumberHealth(string $phoneNumber, ?array $options)
     Get the health score, the same one the portal shows, (1–10) for an owned phone number.

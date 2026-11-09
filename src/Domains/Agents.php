@@ -359,6 +359,14 @@ class Agents
      *                           llmModel (string|null), temperature (number 0-2),
      *                           voiceId (string|null). Model settings are per-channel
      *                           because each channel is served by a different runtime.
+     *                           The sms channel also accepts allowedCommitments: a list
+     *                           of ['kind' => string, 'detail' => string|null] naming the
+     *                           "a person will..." promises the agent may send on
+     *                           autopilot. kind is one of confirm_booking, call_back,
+     *                           text_back, follow_up, hold_slot or send_reminder, each at
+     *                           most once; detail (up to 200 characters) is shown to
+     *                           staff. Any other promise is held for review. A non-empty
+     *                           list on webchat or voice is rejected.
      *                           Spoken channels also accept: speed (0.7-1.2), stability
      *                           (0-1), similarityBoost (0-1), speechModel (string — how
      *                           the agent is voiced, chosen independently of llmModel),

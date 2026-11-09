@@ -186,6 +186,14 @@ check(end($client->calls)[0] === '/number?groupId=G1&currentTollFreeCarrier=fals
 $numbers->getPhoneNumbers(['groupId' => 'G1', 'currentTollFreeCarrier' => null]);
 check(end($client->calls)[0] === '/number?groupId=G1', 'phone numbers leave out an unset currentTollFreeCarrier');
 
+// The released filter on the number list is sent as a true/false query value.
+$numbers->getPhoneNumbers(['groupId' => 'G1', 'released' => true]);
+check(end($client->calls)[0] === '/number?groupId=G1&released=true', 'phone numbers released');
+$numbers->getPhoneNumbers(['groupId' => 'G1', 'released' => false]);
+check(end($client->calls)[0] === '/number?groupId=G1&released=false', 'phone numbers released false');
+$numbers->getPhoneNumbers(['groupId' => 'G1', 'released' => null]);
+check(end($client->calls)[0] === '/number?groupId=G1', 'phone numbers leave out an unset released');
+
 // A group's toll-free requirements are read on the group's own escaped path, with no body.
 $brands = new \SignalHouse\SDK\Domains\Brands($client, $client, true);
 $brands->getTollFreeRequirements('G/1', ['token' => 'test-token']);

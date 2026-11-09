@@ -87,10 +87,12 @@ class Numbers
     /**
      * Get a list of phone numbers with optional filters
      *
-     * @param array $params Filter parameters (phoneNumber, campaignId, registrationId, brandId, subgroupId, groupId, page, limit, currentTollFreeCarrier).
+     * @param array $params Filter parameters (phoneNumber, campaignId, registrationId, brandId, subgroupId, groupId, page, limit, currentTollFreeCarrier, released).
      *     registrationId filters to numbers provisioned under this registration.
      *     currentTollFreeCarrier (bool), with groupId or subgroupId: when true, return only the toll-free numbers a new
      *     toll-free campaign in that group can use.
+     *     released (bool), with subgroupId or groupId: when true, return only its released numbers (status RELEASED)
+     *     instead of its active ones.
      * @param array $options Additional request options
      * @return array The response from the server
      *
