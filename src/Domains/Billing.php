@@ -26,7 +26,7 @@ class Billing
     /**
      * Get transaction history with optional filters
      *
-     * @param array $params Filter parameters (groupId, subgroupId, brandId, campaignId, entryType, transactionType, startDate, endDate)
+     * @param array $params Filter parameters (groupId, subgroupId, brandId, campaignId, entryType, transactionType, startDate, endDate, category, page, limit). category: One category, or a comma-separated list: one of the RCS categories RCS_RICH_OUTBOUND, RCS_RICH_MEDIA_OUTBOUND, RCS_INBOUND, RCS_ACTION_CLICK, RCS_MEDIA_SURCHARGE, RCS_FEE_ONBOARDING, RCS_FEE_RENEWAL, RCS_SESSION_ADJUSTMENT or RCS_SESSION_CARRIER_ADJUSTMENT, or RCS_CARRIER_PASSTHROUGH for RCS carrier rows alone. Any other value is rejected with a 400.
      * @param array $options Additional request options
      * @return array The response from the server
      */

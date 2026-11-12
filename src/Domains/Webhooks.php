@@ -19,7 +19,7 @@ class Webhooks
      * Get a list of webhooks with optional filters. Each returned endpoint carries
      * `hasSigningSecret` (bool) instead of the signing secret itself — see createWebhook.
      *
-     * @param array $params Filter parameters (id, groupId, endpointType, phoneNumber, page, limit)
+     * @param array $params Filter parameters (id, groupId, endpointType, phoneNumber, agentId, page, limit)
      * @param array $options Additional request options
      * @return array The response from the server
      */
@@ -44,6 +44,10 @@ class Webhooks
      * `NUMBER_HEALTH_BELOW_THRESHOLD` and `CAMPAIGN_HEALTH_BELOW_THRESHOLD` each take `['threshold' => n]`,
      * the 7-day health score (1.5–10, in 0.5 steps) below which the event fires. A subscribed health event
      * without a threshold is stored with the default, 6.
+     *
+     * `endpointType` in $webhookData is `Global`, `Number` or `Agent`. An `Agent` endpoint receives one RCS
+     * agent's events only: it needs `agentId`, and may set `secondaryUrl`, which gets one try when every
+     * attempt to `url` fails.
      *
      * @param array $webhookData The webhook data
      * @param array $options Additional request options

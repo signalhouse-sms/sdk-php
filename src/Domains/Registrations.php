@@ -32,17 +32,25 @@ class Registrations
                  *
                  * @param string $registrationId The ID of the registration to review
                  * @param string $action "APPROVE" (submits the registration to the provider) or "REJECT"
-                 * @param string|null $reason Why the registration was rejected; required for "REJECT"
+                 * @param string|null $reason Why the registration was rejected; required for "REJECT". An RCS agent takes 10 to 256 characters
                  * @param array $options Additional request options
+                 * @param string|null $reasonCode The rejection catalogue code; required to reject an RCS agent, refused for any other type
+                 * @param array|null $rejectionReasons Field-level reasons for an RCS agent: arrays of field, code, reason and recommendedAction
                  * @return array The response from the server
                  */
-                public function reviewRegistration(string $registrationId, string $action, ?string $reason = null, array $options = []): array
+                public function reviewRegistration(string $registrationId, string $action, ?string $reason = null, array $options = [], ?string $reasonCode = null, ?array $rejectionReasons = null): array
                 {
                     $this->client->require(['registrationId' => $registrationId, 'action' => $action]);
                     $safeRegistrationId = rawurlencode($registrationId);
                     $body = ['action' => $action];
                     if ($reason !== null) {
                         $body['reason'] = $reason;
+                    }
+                    if ($reasonCode !== null) {
+                        $body['reasonCode'] = $reasonCode;
+                    }
+                    if ($rejectionReasons !== null) {
+                        $body['rejectionReasons'] = $rejectionReasons;
                     }
                     return $this->client->request("/registration/{$safeRegistrationId}/review", array_merge([
                         'method' => 'POST',
@@ -268,20 +276,23 @@ class Registrations
      * launch request. Allowed while the provider reports the agent ready for testing, after a Signal House rejection,
      * or after every carrier refused an earlier launch (409 otherwise); a failed requirement is a 400 whose details
      * carry ['code' => 'REGISTRATION_INCOMPLETE', 'errors', 'warnings'].
-     * An RCS agent's launch request charges its launch fees: a wallet that cannot cover them gets a 402, and nothing changes.
+     * An RCS agent's launch request charges its launch fees: a wallet that cannot cover them gets a 402, and nothing changes. When any fee is due the request must set \$acknowledgeFees, or it gets a 400 with code FEE_ACKNOWLEDGEMENT_REQUIRED and nothing is held; a launch with nothing due needs no acknowledgement.
+     * When the agent's brand vertical is healthcare or insurance, the launch needs the protected health information (PHI) disclosure acknowledged: set \$acknowledgePhi, or the request gets a 400 REGISTRATION_INCOMPLETE whose errors name consent.phiAcknowledgement. The API records the acknowledgement as consent.phiAcknowledgement ['acknowledgedAt', 'acknowledgedBy'] from the caller; the client sends only the boolean, and an agent update cannot set it. Once recorded, a later launch request needs no new acknowledgement.
      *
      * @param string $registrationId The registration ID (e.g. RCSA7K2M1QZ8RP)
      * @param array $options Additional request options
+     * @param bool|null $acknowledgeFees Accept the fees due; required when any are
+     * @param bool|null $acknowledgePhi Accept the PHI disclosure; required for a healthcare or insurance brand
      * @return array The response whose data is the registration, now SIGNAL_HOUSE_REVIEW
      * @throws \SignalHouse\SDK\Exceptions\ValidationException If registrationId is missing
      */
-    public function launchRegistration(string $registrationId, array $options = []): array
+    public function launchRegistration(string $registrationId, array $options = [], ?bool $acknowledgeFees = null, ?bool $acknowledgePhi = null): array
     {
         $this->client->require(['registrationId' => $registrationId]);
         $safeRegistrationId = rawurlencode($registrationId);
         return $this->client->request("/registration/{$safeRegistrationId}/launch", array_merge([
             'method' => 'POST',
-        ], $options));
+        ], self::launchBody($acknowledgeFees, $acknowledgePhi), $options));
     }
 
     /**
@@ -323,5 +334,18 @@ class Registrations
             'method' => 'POST',
             'body' => $registrationData,
         ], $options));
+    }
+
+    /**
+     * A launch request's options: the body of the acknowledgements the caller set, or none when there are none.
+     *
+     * @param bool|null $acknowledgeFees Accept the fees due, or null to leave it out
+     * @param bool|null $acknowledgePhi Accept the PHI disclosure, or null to leave it out
+     * @return array ['body' => [...]], or [] when both are null
+     */
+    private static function launchBody(?bool $acknowledgeFees, ?bool $acknowledgePhi): array
+    {
+        $body = array_filter(['acknowledgeFees' => $acknowledgeFees, 'acknowledgePhi' => $acknowledgePhi], fn ($value) => $value !== null);
+        return $body === [] ? [] : ['body' => $body];
     }
 }

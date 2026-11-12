@@ -35,6 +35,9 @@ class Messages
     /** Body keys whose value is a JSON object, so an empty PHP array must be sent as {} rather than []. */
     private const OBJECT_KEYS = ['content', 'fallback'];
 
+    /** Recipient keys whose value is a JSON object, for the same reason. */
+    private const RECIPIENT_OBJECT_KEYS = ['variables', 'metadata'];
+
     private HttpClient $client;
 
     public function __construct(HttpClient $client)
@@ -51,7 +54,9 @@ class Messages
      *     are omitted.
      * @param array $options Additional request options
      * @return array The response whose data is ['requested', 'enqueued', 'failed', 'bulkId', 'messages'] (201).
-     *     A blocked row carries blockReason, reason and issues; an archived template answers 409 TEMPLATE_ARCHIVED
+     *     A blocked row carries blockReason, reason and issues; an archived template answers 409 TEMPLATE_ARCHIVED. A recipient
+     *     from 19999990000 to 19999990359 makes the whole request a simulation, as on SMS: data is ['simulated' => true,
+     *     'webhooks'] and nothing is stored, sent or charged
      * @throws ValidationException If agentId or recipients is missing
      */
     public function send(array $params, array $options = []): array
@@ -91,7 +96,7 @@ class Messages
      *     linked campaign). Unset or null keys are omitted.
      * @param array $options Additional request options
      * @return array The response whose data is ['billingClass', 'segments', 'recipientCount', 'rcsLeg', 'fallbackLeg',
-     *     'totals', 'balance', 'issues', 'warnings'], issues listing what would block the send and warnings what an iPhone draws differently. rcsLeg.mediaSurcharge is the carrier's surcharge on media over 5 MB, already inside rcsLeg.cost; a message over 100 MB adds a MEDIA_TOO_LARGE issue.
+     *     'totals', 'balance', 'issues', 'warnings'], issues listing what would block the send and warnings what an iPhone draws differently. rcsLeg.mediaSurcharge is the carrier's surcharge on media over 5 MB for one recipient, and rcsLeg.cost already holds it for every recipient; rcsLeg.cost is null with the fallback mode sms_only; a message over 100 MB adds a MEDIA_TOO_LARGE issue.
      * @throws ValidationException If agentId is missing
      */
     public function estimate(array $params, array $options = []): array
@@ -109,8 +114,8 @@ class Messages
      * @param string $agentId The agent ID
      * @param array $phoneNumbers Up to 500 numbers, 10-15 digits, with or without the +
      * @param array $options Additional request options
-     * @return array The response whose data is ['results' => [['phoneNumber', 'capability']]], capability being ENABLED,
-     *     UNREACHABLE or UNKNOWN
+     * @return array The response whose data is { results: [{ phoneNumber, capability, rcsEnabled, reason, features, carrier, checkedAt, cached }] },
+     *     capability being ENABLED, UNREACHABLE or UNKNOWN, and reason CAPABLE, NOT_CAPABLE, NOT_LAUNCHED_ON_CARRIER or UNKNOWN; rcsEnabled is true only for CAPABLE, carrier and checkedAt may be null, and features is empty today
      * @throws ValidationException If agentId or phoneNumbers is missing
      */
     public function capabilities(string $agentId, array $phoneNumbers, array $options = []): array
@@ -122,6 +127,27 @@ class Messages
         return $this->client->request('/rcs/capabilities', array_merge([
             'method' => 'POST',
             'body' => ['agentId' => $agentId, 'phoneNumbers' => $phoneNumbers],
+        ], $options));
+    }
+
+    /**
+     * Fake an inbound event from an approved tester of the agent, with no carrier involved: it runs the real inbound handlers and webhooks, as free test traffic. A simulated STOP really opts the tester out; a simulated START clears it. Anyone else gets a 403 with code NOT_TESTER. Returns 202 with { status, messageId }.
+     *
+     * @param string $agentId The agent ID
+     * @param string $from The approved tester's number
+     * @param string $type TEXT, SUGGESTION, LOCATION, FILE or UNSUBSCRIBE
+     * @param array $fields text (required for TEXT), postbackData (SUGGESTION needs this or buttonId), messageId, buttonId,
+     *     latitude and longitude (required for LOCATION), fileName
+     * @param array $options Additional request options
+     * @return array The response whose data is ['status' => 'QUEUED', 'messageId']
+     * @throws ValidationException If agentId, from or type is missing
+     */
+    public function simulateInbound(string $agentId, string $from, string $type, array $fields = [], array $options = []): array
+    {
+        $this->client->require(['agentId' => $agentId, 'from' => $from, 'type' => $type]);
+        return $this->client->request('/message/rcs/simulate-inbound', array_merge([
+            'method' => 'POST',
+            'body' => array_merge(['agentId' => $agentId, 'from' => $from, 'type' => $type], self::body(['text', 'postbackData', 'messageId', 'buttonId', 'latitude', 'longitude', 'fileName'], $fields)),
         ], $options));
     }
 
@@ -175,6 +201,7 @@ class Messages
             'deliveredChannel' => $params['deliveredChannel'] ?? null,
             'isTest' => $params['isTest'] ?? null,
             'messageType' => 'RCS',
+            'dateBounds' => 'exact',
         ]);
         return $this->client->request("/message{$queryString}", array_merge([
             'method' => 'GET',
@@ -196,8 +223,27 @@ class Messages
             if (isset($params[$key])) {
                 $value = $params[$key];
                 $body[$key] = $value === [] && in_array($key, self::OBJECT_KEYS, true) ? (object) [] : $value;
+                if ($key === 'recipients') {
+                    $body[$key] = array_map([self::class, 'recipient'], $value);
+                }
             }
         }
         return $body;
+    }
+
+    /**
+     * Send a recipient's empty maps as {} rather than [].
+     *
+     * @param array $recipient The recipient
+     * @return array The recipient
+     */
+    private static function recipient(array $recipient): array
+    {
+        foreach (self::RECIPIENT_OBJECT_KEYS as $key) {
+            if (isset($recipient[$key]) && $recipient[$key] === []) {
+                $recipient[$key] = (object) [];
+            }
+        }
+        return $recipient;
     }
 }

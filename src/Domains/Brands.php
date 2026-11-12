@@ -37,6 +37,7 @@ class Brands
      *                      toll-free brands a new toll-free campaign in that group can use.
      *                      Responses may include brandId: null for pending brands.
      *                      Each brand carries `carrierSuspensions` (carrier brand suspension rules; active while liftedAt is null).
+     *                      Each brand also carries `cnamName` (its caller name for numbers, or null; see getCallerName).
      * @param array $options Additional request options
      * @return array The response from the server
      */
@@ -361,6 +362,68 @@ class Brands
         return $this->multipartClient->request("/brand/appeal/{$safeBrandId}", array_merge([
             'method' => 'POST',
             'multipart' => $multipart,
+        ], $options));
+    }
+
+    /**
+     * Get a brand's caller name (CNAM) and the numbers it applies to: every number whose caller name comes
+     * from this brand (its campaign numbers, numbers it was picked on, and campaign-less numbers of
+     * subgroups that use it as their default caller-ID brand)
+     *
+     * Roles: api, admin, developer, billing, user
+     *
+     * @param string $brandId Brand lookup id (carrier Brand ID, record _id, or internal reference)
+     * @param array $options Additional request options
+     * @return array Response resolving to { brandId, companyName, cnamName, eligible, numbers: { total, items } }; items lists the first 100
+     */
+    public function getCallerName(string $brandId, array $options = []): array
+    {
+        $this->client->require(['brandId' => $brandId]);
+        $safeBrandId = rawurlencode($brandId);
+        return $this->client->request("/brand/cnam/{$safeBrandId}", array_merge([
+            'method' => 'GET',
+        ], $options));
+    }
+
+    /**
+     * Set a brand's caller name (CNAM). It replaces the caller name on every number whose caller name comes
+     * from this brand, names set on a number included, and numbers that later come under the brand get it
+     * too. The name may only remove characters from the brand's registered name and must be 1-15 letters,
+     * digits, spaces, - or _; the brand must be verified. Numbers are updated at the carrier in the background.
+     *
+     * Roles: api, admin, developer
+     *
+     * @param string $brandId Brand lookup id (carrier Brand ID, record _id, or internal reference)
+     * @param string $name The caller name to show
+     * @param array $options Additional request options
+     * @return array Response resolving to { brandId, companyName, cnamName, eligible, numbers: { total, items } }
+     */
+    public function setCallerName(string $brandId, string $name, array $options = []): array
+    {
+        $this->client->require(['brandId' => $brandId, 'name' => $name]);
+        $safeBrandId = rawurlencode($brandId);
+        return $this->client->request("/brand/cnam/{$safeBrandId}", array_merge([
+            'method' => 'PUT',
+            'body' => ['name' => $name],
+        ], $options));
+    }
+
+    /**
+     * Remove a brand's caller name (CNAM). Numbers that had it go back to the automatic name if their
+     * subgroup has caller name auto-apply on, otherwise to no caller name. Names set on a number are kept.
+     *
+     * Roles: api, admin, developer
+     *
+     * @param string $brandId Brand lookup id (carrier Brand ID, record _id, or internal reference)
+     * @param array $options Additional request options
+     * @return array Response resolving to { brandId, companyName, cnamName, eligible, numbers: { total, items } }
+     */
+    public function deleteCallerName(string $brandId, array $options = []): array
+    {
+        $this->client->require(['brandId' => $brandId]);
+        $safeBrandId = rawurlencode($brandId);
+        return $this->client->request("/brand/cnam/{$safeBrandId}", array_merge([
+            'method' => 'DELETE',
         ], $options));
     }
 }

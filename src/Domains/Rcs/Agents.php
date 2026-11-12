@@ -72,8 +72,8 @@ class Agents
     /**
      * List agents, newest first
      *
-     * @param array $params groupId?, subgroupId?, status? (DRAFT, PENDING_REVIEW, REJECTED, AGENT_CREATING or
-     *     ARCHIVED; one value or an array, sent as repeated keys), brandId? (agents linked to this brand),
+     * @param array $params groupId?, subgroupId?, status? (DRAFT, PENDING_REVIEW, REJECTED, AGENT_CREATING,
+     *     ARCHIVE_PENDING or ARCHIVED; one value or an array, sent as repeated keys), brandId? (agents linked to this brand),
      *     campaignId? (agents linked to this campaign), page? (default 1), limit? (default 25, max 100)
      * @param array $options Additional request options
      * @return array The response whose data is ['data' => agents, 'total', 'page', 'limit']
@@ -155,7 +155,7 @@ class Agents
 
     /**
      * Submit a draft: create the agent at the carrier partner, with no review first. It needs the full profile, a
-     * useCase and NON_CONVERSATIONAL billing; otherwise a 400 whose details carry ['code' => 'REGISTRATION_INCOMPLETE',
+     * useCase and a billingCategory; otherwise a 400 whose details carry ['code' => 'REGISTRATION_INCOMPLETE',
      * 'errors', 'warnings']. The agent moves to AGENT_CREATING, then IN_TESTING once the partner reports it ready.
      *
      * @param string $agentId The agent ID
@@ -176,28 +176,33 @@ class Agents
      * CARRIER_REJECTED (409 otherwise); a failed requirement is a 400 whose details carry ['code' =>
      * 'REGISTRATION_INCOMPLETE', 'errors', 'warnings']. Sends POST /registration/:agentId/launch: the agent is a
      * registration.
-     * The request charges the agent's launch fees: a wallet that cannot cover them gets a 402, and the agent stays where it is. The agent's launchFees quotes what the next request charges.
+     * The request charges the agent's launch fees: a wallet that cannot cover them gets a 402, and the agent stays where it is. When any fee is due the request must set \$acknowledgeFees, or it gets a 400 with code FEE_ACKNOWLEDGEMENT_REQUIRED and nothing is held; a launch with nothing due needs no acknowledgement. The agent's launchFees quotes what the next request charges.
+     * When the agent's brand vertical is healthcare or insurance, the launch needs the protected health information (PHI) disclosure acknowledged: set \$acknowledgePhi, or the request gets a 400 REGISTRATION_INCOMPLETE whose errors name consent.phiAcknowledgement. The API records the acknowledgement as consent.phiAcknowledgement ['acknowledgedAt', 'acknowledgedBy'] from the caller; the client sends only the boolean, and an agent update cannot set it. Once recorded, a later launch request needs no new acknowledgement.
      *
      * @param string $agentId The agent ID
      * @param array $options Additional request options
+     * @param bool|null $acknowledgeFees Accept the fees due; required when any are
+     * @param bool|null $acknowledgePhi Accept the PHI disclosure; required for a healthcare or insurance brand
      * @return array The response whose data is the agent (status PENDING_REVIEW)
      * @throws ValidationException If agentId is missing
      */
-    public function launch(string $agentId, array $options = []): array
+    public function launch(string $agentId, array $options = [], ?bool $acknowledgeFees = null, ?bool $acknowledgePhi = null): array
     {
         $this->client->require(['agentId' => $agentId]);
         $safeAgentId = rawurlencode($agentId);
         return $this->client->request("/registration/{$safeAgentId}/launch", array_merge([
             'method' => 'POST',
-        ], $options));
+        ], self::launchBody($acknowledgeFees, $acknowledgePhi), $options));
     }
 
     /**
-     * Archive an agent
+     * Archive an agent. One the carrier partner created stops sending at once and stays ARCHIVE_PENDING until
+     * Signal House confirms the partner cancelled it, then ARCHIVED. Archiving cannot be undone; an agent already
+     * ARCHIVE_PENDING answers 409.
      *
      * @param string $agentId The agent ID
      * @param array $options Additional request options
-     * @return array The response whose data is the agent (status ARCHIVED)
+     * @return array The response whose data is the agent (status ARCHIVE_PENDING or ARCHIVED)
      * @throws ValidationException If agentId is missing
      */
     public function archive(string $agentId, array $options = []): array
@@ -226,6 +231,24 @@ class Agents
     }
 
     /**
+     * Remove a tester at once, at any point before the agent is archived. The number must be a tester on the agent
+     * (404); an archived agent answers 409.
+     *
+     * @param string $agentId The agent ID
+     * @param string $phoneNumber The tester's US number, with or without the +
+     * @param array $options Additional request options
+     * @return array The response whose data is the agent
+     * @throws ValidationException If agentId or phoneNumber is missing
+     */
+    public function removeTester(string $agentId, string $phoneNumber, array $options = []): array
+    {
+        $this->client->require(['phoneNumber' => $phoneNumber]);
+        return $this->client->request($this->agentPath($agentId, '/testers/' . rawurlencode($phoneNumber)), array_merge([
+            'method' => 'DELETE',
+        ], $options));
+    }
+
+    /**
      * Host the agent's logo (224 x 224 px, 50 KB max) or hero image (1440 x 448 px, 200 KB max), PNG or JPEG, and set
      * it on the draft. Images of any other size are refused.
      *
@@ -243,6 +266,19 @@ class Agents
             'method' => 'POST',
             'multipart' => $this->assetParts($params),
         ], $options));
+    }
+
+    /**
+     * A launch request's options: the body of the acknowledgements the caller set, or none when there are none.
+     *
+     * @param bool|null $acknowledgeFees Accept the fees due, or null to leave it out
+     * @param bool|null $acknowledgePhi Accept the PHI disclosure, or null to leave it out
+     * @return array ['body' => [...]], or [] when both are null
+     */
+    private static function launchBody(?bool $acknowledgeFees, ?bool $acknowledgePhi): array
+    {
+        $body = array_filter(['acknowledgeFees' => $acknowledgeFees, 'acknowledgePhi' => $acknowledgePhi], fn ($value) => $value !== null);
+        return $body === [] ? [] : ['body' => $body];
     }
 
     /**

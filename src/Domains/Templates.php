@@ -100,7 +100,9 @@ class Templates
     }
 
     /**
-     * Publish the template's current draft
+     * Publish the template's current draft. A block whose text or image the Moderation API flags is an error with code
+     * CONTENT_POLICY_FLAGGED, whose message names the category ("Content moderation flagged this text: spam"). The check
+     * passes when the Moderation API fails.
      *
      * @param string $templateId The template ID
      * @param array $params groupId
@@ -158,7 +160,8 @@ class Templates
     }
 
     /**
-     * Run publication validation against a candidate body or a stored version without saving anything
+     * Run publication validation against a candidate body or a stored version without saving anything. The publish
+     * checks run, CONTENT_POLICY_FLAGGED included; saving a draft does not run that check.
      *
      * @param string $templateId The template ID
      * @param array $params groupId and exactly one of body (a candidate body) or version (same selector as get)

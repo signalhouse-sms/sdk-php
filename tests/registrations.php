@@ -109,6 +109,8 @@ foreach (['quoteVersion', 'version', 'country', 'quantity'] as $legacy) {
 $domain->admin->reviewRegistration('REG1', 'APPROVE');
 [$url, $options] = end($client->calls);
 check($url === '/registration/REG1/review' && $options['method'] === 'POST' && $options['body'] === ['action' => 'APPROVE'], 'approve');
+$domain->admin->reviewRegistration('RCSA1', 'REJECT', 'Consent is too narrow', reasonCode: 'OPT_IN_SCOPE', rejectionReasons: [['code' => 'OPT_IN_SCOPE', 'reason' => 'Promotions are not covered']]);
+check(end($client->calls)[1]['body'] === ['action' => 'REJECT', 'reason' => 'Consent is too narrow', 'reasonCode' => 'OPT_IN_SCOPE', 'rejectionReasons' => [['code' => 'OPT_IN_SCOPE', 'reason' => 'Promotions are not covered']]], 'review sends the RCS reason code and reasons');
 $domain->admin->reviewRegistration('REG1', 'REJECT', 'Not a business use case');
 check(end($client->calls)[1]['body'] === ['action' => 'REJECT', 'reason' => 'Not a business use case'], 'reject reason');
 $domain->admin->correctRegistration('REG1', 'Provider asked', ['useCases' => ['Support']]);

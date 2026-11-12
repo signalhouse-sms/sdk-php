@@ -272,7 +272,8 @@ class Numbers
      *
      * @param string $phoneNumber The phone number (E.164, leading + optional)
      * @param array $options Additional request options
-     * @return array Response resolving to { phoneNumber, cnam, autoApply, eligible, ineligibleReason }
+     * @return array Response resolving to { phoneNumber, cnam, autoApply, eligible, ineligibleReason };
+     *               cnam.source is MANUAL (set on the number), BRAND (the brand's caller name) or AUTO (subgroup auto-apply)
      */
     public function getCallerName(string $phoneNumber, array $options = []): array
     {
@@ -311,8 +312,8 @@ class Numbers
     }
 
     /**
-     * Remove a phone number's own caller name (CNAM). If its subgroup has caller name auto-apply on,
-     * the number goes back to the automatic name.
+     * Remove a phone number's own caller name (CNAM). The number goes back to its brand's caller name if
+     * the brand has one, else to the automatic name if its subgroup has caller name auto-apply on.
      *
      * Roles: api, admin, developer
      *

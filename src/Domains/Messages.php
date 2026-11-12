@@ -102,13 +102,30 @@ class Messages
      *
      * @param string $id The message ID
      * @param array $options Additional request options
-     * @return array The response whose data is the message; an unknown ID is a 404
+     * @return array The response whose data is the message; an unknown ID is a 404. An outbound RCS message and its fallback
+     *     leg also carry costBreakdown, { legs: [{ messageId, channel, billed, billingClass, segments, baseMicros, carrierMicros, rated }] }, which is null when it cannot be computed
      */
     public function getMessage(string $id, array $options = []): array
     {
         $this->client->require(['id' => $id]);
         $safeId = rawurlencode($id);
         return $this->client->request("/message/{$safeId}", array_merge([
+            'method' => 'GET',
+        ], $options));
+    }
+
+    /**
+     * Get the taps on one RCS message, oldest first
+     *
+     * @param string $id The message ID
+     * @param array $options Additional request options
+     * @return array The response whose data is `results`; an unknown ID is a 404
+     */
+    public function getMessageInteractions(string $id, array $options = []): array
+    {
+        $this->client->require(['id' => $id]);
+        $safeId = rawurlencode($id);
+        return $this->client->request("/message/{$safeId}/interactions", array_merge([
             'method' => 'GET',
         ], $options));
     }
