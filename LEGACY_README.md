@@ -85,6 +85,7 @@ $wallet = $sdk->billing->getWallet('G12345678');
 | `$sdk->subgroups` | Subgroup management |
 | `$sdk->subscriptions` | Subscription and plan management |
 | `$sdk->users` | User management and notification preferences |
+| `$sdk->verify` | Carrier phone-number checks: SIM Swap and Number Verify (phone on mobile data; each answered check is billed) |
 | `$sdk->webhooks` | Webhook management |
 
 ## Admin Endpoints

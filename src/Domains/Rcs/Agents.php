@@ -21,18 +21,19 @@ use SignalHouse\SDK\HttpClient;
  * write to; required in full before the launch request), useCase
  * (OTP|TRANSACTIONAL|PROMOTIONAL|MULTI_USE), billingCategory (NON_CONVERSATIONAL (default)|CONVERSATIONAL),
  * defaultFallback (['mode' => auto|rcs_only|sms_only|none, 'channel' => auto|sms|mms, 'from' => a number on the
- * linked campaign]), excludedCarriers ([] or ['T_MOBILE'], the carrier partner's carrier name) and testers (up to
- * 200 numbers).
+ * linked campaign]), excludedCarriers ([] or ['T_MOBILE'], the carrier partner's carrier name), testers (up to
+ * 200 numbers) and autofill (where each prefilled field came from, by path such as 'consent.optInDetails':
+ * ['source' => brand|campaign|landing, 'sourceId', 'at', 'edited']; the API adds its own for the fields it fills).
  */
 class Agents
 {
     /** The body keys an agent create or update may carry. */
     private const BODY_KEYS = [
-        'brandId', 'campaignId', 'agent', 'consent', 'contact', 'useCase', 'billingCategory', 'defaultFallback', 'excludedCarriers', 'testers',
+        'brandId', 'campaignId', 'agent', 'consent', 'contact', 'useCase', 'billingCategory', 'defaultFallback', 'excludedCarriers', 'testers', 'autofill',
     ];
 
     /** Body keys whose value is a JSON object, so an empty PHP array must be sent as {} rather than []. */
-    private const OBJECT_KEYS = ['agent', 'consent', 'contact', 'defaultFallback'];
+    private const OBJECT_KEYS = ['agent', 'consent', 'contact', 'defaultFallback', 'autofill'];
 
     private HttpClient $client;
     private HttpClient $multipartClient;
@@ -49,7 +50,7 @@ class Agents
      *
      * @param array $params brandId (carrier brand ID, provisional UUID or _id), campaignId? (a campaign ID or _id of
      *     that brand; required before the launch request), agent?, consent?, contact?, useCase? (required before
-     *     submit), billingCategory?, defaultFallback?, excludedCarriers?, testers?. Unset or null keys are omitted.
+     *     submit), billingCategory?, defaultFallback?, excludedCarriers?, testers?, autofill?. Unset or null keys are omitted.
      * @param array $options Additional request options
      * @return array The response whose data is the agent (status DRAFT, 201)
      * @throws ValidationException If brandId is missing
@@ -99,7 +100,8 @@ class Agents
      *
      * @param string $agentId The agent ID (e.g. RCSA7K2M1QZ8RP)
      * @param array $options Additional request options
-     * @return array The response whose data is the agent
+     * @return array The response whose data is the agent; googleAgentId is Google's id for it, null until Google has
+     *     created the agent
      * @throws ValidationException If agentId is missing
      */
     public function get(string $agentId, array $options = []): array
@@ -114,11 +116,14 @@ class Agents
      * testing (the change is pushed to the carrier partner). agent, consent and contact merge field by field; every
      * other key replaces. A key set to null is sent as null (campaignId => null unlinks the campaign); an absent key
      * keeps its value. 409 in any other status; brandId is locked once the agent exists at the partner and
-     * billingCategory once a launch was requested.
+     * billingCategory once a launch was requested. After a carrier rejected a launch other carriers took
+     * (PARTIALLY_LAUNCHED with a REJECTED carrier), only consent and contact may change, and nothing is pushed: send them
+     * with requestCarrierUpdate. autofill replaces the prefill markers; absent, the stored ones are kept and a changed
+     * field's marker turns edited.
      *
      * @param string $agentId The agent ID
      * @param array $params brandId? (relink to another brand of the same subgroup), campaignId?, agent?,
-     *     consent?, contact?, useCase?, billingCategory?, defaultFallback?, excludedCarriers?, testers?
+     *     consent?, contact?, useCase?, billingCategory?, defaultFallback?, excludedCarriers?, testers?, autofill?
      * @param array $options Additional request options
      * @return array The response whose data is the agent
      * @throws ValidationException If agentId is missing
@@ -143,7 +148,8 @@ class Agents
      *
      * @param string $agentId The agent ID
      * @param array $options Additional request options
-     * @return array The response whose data is ['valid', 'errors' => [['field', 'reason']], 'warnings' => [['field', 'reason']]]
+     * @return array The response whose data is ['valid', 'errors' => [['field', 'reason', 'code'?]], 'warnings' => [['field', 'reason']]];
+     *     a copy-rule error at the launch gate carries the carrier partner's key as code (for example OPT_IN_MSG_RATE_DISCL_MISSING)
      * @throws ValidationException If agentId is missing
      */
     public function validate(string $agentId, array $options = []): array
@@ -157,6 +163,8 @@ class Agents
      * Submit a draft: create the agent at the carrier partner, with no review first. It needs the full profile, a
      * useCase and a billingCategory; otherwise a 400 whose details carry ['code' => 'REGISTRATION_INCOMPLETE',
      * 'errors', 'warnings']. The agent moves to AGENT_CREATING, then IN_TESTING once the partner reports it ready.
+     * A group that has not finished account verification gets a 403 with code GROUP_UNVERIFIED, and a rejected one a
+     * 403 with code GROUP_REJECTED; a pending verification passes.
      *
      * @param string $agentId The agent ID
      * @param array $options Additional request options
@@ -174,8 +182,10 @@ class Agents
      * Request the agent's launch: the launch requirements are checked and the agent goes to Signal House review (status
      * PENDING_REVIEW), whose approval files the launch with the carrier partner. Allowed from IN_TESTING, REJECTED and
      * CARRIER_REJECTED (409 otherwise); a failed requirement is a 400 whose details carry ['code' =>
-     * 'REGISTRATION_INCOMPLETE', 'errors', 'warnings']. Sends POST /registration/:agentId/launch: the agent is a
-     * registration.
+     * 'REGISTRATION_INCOMPLETE', 'errors', 'warnings'], and a copy-rule error carries the carrier partner's key as its code
+     * (for example OPT_IN_MSG_RATE_DISCL_MISSING). A group that has not finished account verification gets a 403 with
+     * code GROUP_UNVERIFIED, and a rejected one a 403 with code GROUP_REJECTED. Sends POST /registration/:agentId/launch:
+     * the agent is a registration.
      * The request charges the agent's launch fees: a wallet that cannot cover them gets a 402, and the agent stays where it is. When any fee is due the request must set \$acknowledgeFees, or it gets a 400 with code FEE_ACKNOWLEDGEMENT_REQUIRED and nothing is held; a launch with nothing due needs no acknowledgement. The agent's launchFees quotes what the next request charges.
      * When the agent's brand vertical is healthcare or insurance, the launch needs the protected health information (PHI) disclosure acknowledged: set \$acknowledgePhi, or the request gets a 400 REGISTRATION_INCOMPLETE whose errors name consent.phiAcknowledgement. The API records the acknowledgement as consent.phiAcknowledgement ['acknowledgedAt', 'acknowledgedBy'] from the caller; the client sends only the boolean, and an agent update cannot set it. Once recorded, a later launch request needs no new acknowledgement.
      *
@@ -196,6 +206,27 @@ class Agents
     }
 
     /**
+     * Send Signal House the corrected launch answers after a carrier rejected a launch other carriers took. The carrier
+     * partner takes no change through its API once a carrier launched, so Signal House emails it the update; edit consent
+     * and contact first. The agent's carrierUpdate reads REQUESTED for the rejected carriers, then SENT once Signal House
+     * sent it. 409 when no carrier is REJECTED after a partial launch, or an update already waits. Sends POST
+     * /registration/:agentId/carrier-update: the agent is a registration.
+     *
+     * @param string $agentId The agent ID
+     * @param array $options Additional request options
+     * @return array The response whose data is the agent's registration, with data.carrierUpdate
+     * @throws ValidationException If agentId is missing
+     */
+    public function requestCarrierUpdate(string $agentId, array $options = []): array
+    {
+        $this->client->require(['agentId' => $agentId]);
+        $safeAgentId = rawurlencode($agentId);
+        return $this->client->request("/registration/{$safeAgentId}/carrier-update", array_merge([
+            'method' => 'POST',
+        ], $options));
+    }
+
+    /**
      * Archive an agent. One the carrier partner created stops sending at once and stays ARCHIVE_PENDING until
      * Signal House confirms the partner cancelled it, then ARCHIVED. Archiving cannot be undone; an agent already
      * ARCHIVE_PENDING answers 409.
@@ -210,6 +241,26 @@ class Agents
         return $this->client->request($this->agentPath($agentId, '/archive'), array_merge([
             'method' => 'POST',
         ], $options));
+    }
+
+    /**
+     * Make the links that start a chat with the agent: an sms: deep link in Google's format, and a short link that
+     * redirects to it, for a QR code. With the agent's defaultFallback.from, the deep link names that number, so a
+     * handset that cannot reach the agent texts it. The same request returns the same short link. The links reach
+     * approved testers until a carrier launches the agent. Before Google has created the agent the request answers 409
+     * with code GOOGLE_AGENT_PENDING.
+     *
+     * @param string $agentId The agent ID
+     * @param string|null $body The message the chat opens with, prefilled on the handset (max 1,000 characters)
+     * @param array $options Additional request options
+     * @return array The response whose data is ['googleAgentId', 'deepLink', 'shortLink']
+     * @throws ValidationException If agentId is missing
+     */
+    public function createEntryPoints(string $agentId, ?string $body = null, array $options = []): array
+    {
+        return $this->client->request($this->agentPath($agentId, '/entry-points'), array_merge([
+            'method' => 'POST',
+        ], $body === null ? [] : ['body' => ['body' => $body]], $options));
     }
 
     /**

@@ -58,6 +58,12 @@ foreach ($reads as $method => $expectedPath) {
 }
 $messages->getAnalyticsFilterOptions(['groupId' => 'G1', 'region' => 'GB']);
 check(end($client->calls)[0] === '/message/analytics/filter-options?groupId=G1&region=GB', 'filter options region');
+$messages->getConsentRecords(['groupId' => 'G1', 'recipientPhoneNumber' => '15555550100', 'startDate' => '2026-12-01', 'endDate' => '2026-12-31', 'page' => 2, 'limit' => 50], ['token' => 'test-token']);
+[$url, $options] = end($client->calls);
+check($url === '/message/dnc/consent-records?groupId=G1&recipientPhoneNumber=15555550100&startDate=2026-12-01&endDate=2026-12-31&page=2&limit=50', 'consent records query');
+check($options['method'] === 'GET' && $options['token'] === 'test-token', 'consent records method and token');
+$messages->getConsentRecords(['groupId' => 'G1']);
+check(end($client->calls)[0] === '/message/dnc/consent-records?groupId=G1', 'consent records default query');
 $registrationReads = [
     'getAnalytics' => '/message/analytics', 'getAnalyticsDetail' => '/message/analytics/detail',
     'getAnalyticsThroughput' => '/message/analytics/throughput', 'getDncAnalytics' => '/message/dnc/analytics',

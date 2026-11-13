@@ -21,6 +21,7 @@ use SignalHouse\SDK\Domains\Subgroups;
 use SignalHouse\SDK\Domains\Subscriptions;
 use SignalHouse\SDK\Domains\Tickets;
 use SignalHouse\SDK\Domains\Users;
+use SignalHouse\SDK\Domains\Verify;
 use SignalHouse\SDK\Domains\Voice;
 use SignalHouse\SDK\Domains\Webhooks;
 
@@ -45,6 +46,7 @@ class SignalHouseSDK
     public Subscriptions $subscriptions;
     public Tickets $tickets;
     public Users $users;
+    public Verify $verify;
     public Voice $voice;
     public Webhooks $webhooks;
 
@@ -87,6 +89,7 @@ class SignalHouseSDK
         $this->subscriptions = new Subscriptions($client, $enableAdmin);
         $this->tickets = new Tickets($client, $enableAdmin);
         $this->users = new Users($client, $enableAdmin);
+        $this->verify = new Verify($client, $enableAdmin);
         $this->voice = new Voice($client, $enableAdmin);
         $this->webhooks = new Webhooks($client, $enableAdmin);
     }

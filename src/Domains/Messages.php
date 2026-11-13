@@ -103,7 +103,8 @@ class Messages
      * @param string $id The message ID
      * @param array $options Additional request options
      * @return array The response whose data is the message; an unknown ID is a 404. An outbound RCS message and its fallback
-     *     leg also carry costBreakdown, { legs: [{ messageId, channel, billed, billingClass, segments, baseMicros, carrierMicros, rated }] }, which is null when it cannot be computed
+     *     leg also carry costBreakdown, { legs: [{ messageId, channel, billed, billingClass, segments, baseMicros, carrierMicros, rated }] }, which is null when it cannot be computed.
+     *     A settled RCS message also carries carrierFeeMicros: the carrier pass-through and media surcharge it was charged
      */
     public function getMessage(string $id, array $options = []): array
     {
@@ -397,6 +398,31 @@ class Messages
     {
         $queryString = $this->reportingQueryString($params);
         return $this->client->request("/message/dnc{$queryString}", array_merge([
+            'method' => 'GET',
+        ], $options));
+    }
+
+    /**
+     * Export the group's consent ledger, newest first: one append-only record per opt-out or opt-in
+     * instruction a recipient gave (a STOP or START keyword, or the confirmation of an opt-out link).
+     * The ledger records only; sends do not read it.
+     *
+     * @param array $params groupId (required); recipientPhoneNumber filters to one handset, in any
+     *     spelling, matched on its digits; startDate and endDate filter occurredAt (a bare date is its
+     *     whole UTC day, a timestamp is bound as sent); page (default 1); limit (default 100, max 500).
+     * @param array $options Additional request options
+     * @return array The response with { data, total, page, limit }. Each record carries groupId,
+     *     subgroupId, recipientPhoneNumber (the handset, digits), phoneNumber (the business number, or the
+     *     RCS agent id, that received the instruction), scope { type, id } (CAMPAIGN, AGENT or SUBGROUP,
+     *     with that campaign, agent or subgroup id), clearedScopes (for OPT_IN, every { type, id } the START
+     *     cleared; empty for OPT_OUT), action (OPT_OUT or OPT_IN), source (KEYWORD or LINK),
+     *     keyword ("LINK" for a link), messageType (SMS, MMS or RCS), messageId (the inbound message id;
+     *     for a link, the opt-out link's id), actor { type: "RECIPIENT" }, occurredAt and createdAt.
+     */
+    public function getConsentRecords(array $params = [], array $options = []): array
+    {
+        $queryString = $this->client->getQueryString($params);
+        return $this->client->request("/message/dnc/consent-records{$queryString}", array_merge([
             'method' => 'GET',
         ], $options));
     }

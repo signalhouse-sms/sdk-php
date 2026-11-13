@@ -101,6 +101,17 @@ check($url === '/rcs/agent/RCSA%2F1' && json_encode($options['body']) === '{}', 
 check(throws(ValidationException::class, fn () => $agents->submit('')), 'submit requires agentId');
 check($client->calls[$before + 4][1]['body'] === ['acknowledgeFees' => true], 'launch sends the acknowledgement');
 check(throws(ValidationException::class, fn () => $agents->launch('')), 'launch requires agentId');
+$agents->createEntryPoints('RCSA/1', 'Hi there');
+[$url, $options] = end($client->calls);
+check($url === '/rcs/agent/RCSA%2F1/entry-points' && $options['method'] === 'POST' && $options['body'] === ['body' => 'Hi there'], 'createEntryPoints escapes id and sends the opening message');
+$agents->createEntryPoints(AGENT);
+check(!isset(end($client->calls)[1]['body']), 'createEntryPoints without an opening message sends no body');
+check(throws(ValidationException::class, fn () => $agents->createEntryPoints('')), 'createEntryPoints requires agentId');
+$agents->requestCarrierUpdate(AGENT);
+check(end($client->calls)[0] === '/registration/' . AGENT . '/carrier-update' && end($client->calls)[1]['method'] === 'POST' && !isset(end($client->calls)[1]['body']), 'requestCarrierUpdate posts with no body');
+check(throws(ValidationException::class, fn () => $agents->requestCarrierUpdate('')), 'requestCarrierUpdate requires agentId');
+$agents->update(AGENT, ['autofill' => []]);
+check(end($client->calls)[1]['body']['autofill'] == (object) [], 'update sends an empty autofill as an object');
 
 (new Billing($client, false))->getTransactionHistory(['groupId' => 'G1', 'category' => 'RCS_INBOUND,RCS_CARRIER_PASSTHROUGH', 'limit' => 1000]);
 check(str_contains(end($client->calls)[0], 'category=RCS_INBOUND%2CRCS_CARRIER_PASSTHROUGH'), 'history forwards the category');
@@ -169,6 +180,12 @@ $body = end($client->calls)[1]['body'];
 check($body['templateVersion'] === 2 && $body['expireTime'] === '2026-11-05T00:00:00Z' && json_encode($body['fallback']) === '{}', 'send template body, empty fallback is an object');
 check(throws(ValidationException::class, fn () => $messages->send(['recipients' => $recipients])), 'send requires agentId');
 check(throws(ValidationException::class, fn () => $messages->send(['agentId' => AGENT])), 'send requires recipients');
+
+$messages->sendBatch(['agentId' => AGENT, 'recipients' => $recipients, 'templateId' => 'T1', 'fallback' => [], 'groupId' => 'G1'], ['idempotencyKey' => 'k2']);
+[$url, $options] = end($client->calls);
+check($url === '/message/rcs/batch' && $options['method'] === 'POST' && $options['idempotencyKey'] === 'k2', 'sendBatch');
+check(json_encode($options['body']) === json_encode(['agentId' => AGENT, 'recipients' => $recipients, 'templateId' => 'T1', 'fallback' => (object) []]), 'sendBatch builds the send body');
+check(throws(ValidationException::class, fn () => $messages->sendBatch(['agentId' => AGENT])), 'sendBatch requires recipients');
 
 $messages->validate(['agentId' => AGENT, 'recipients' => $recipients, 'templateId' => 'T1', 'simulate' => 'read']);
 [$url, $options] = end($client->calls);
@@ -243,8 +260,9 @@ if (is_file($fixtures)) {
         match ($case['operation']) {
             'messages.capabilities' => $target->capabilities($input['agentId'], $input['phoneNumbers']),
             'messages.get' => $target->get($input['messageId']),
+            'agents.createEntryPoints' => $target->createEntryPoints($input['agentId'], $input['body'] ?? null),
             'agents.launch' => $target->launch($input['agentId'], [], $input['acknowledgeFees'] ?? null, $input['acknowledgePhi'] ?? null),
-            'agents.get', 'agents.validate', 'agents.submit', 'agents.archive' => $target->$method($input['agentId']),
+            'agents.get', 'agents.validate', 'agents.submit', 'agents.archive', 'agents.requestCarrierUpdate' => $target->$method($input['agentId']),
             'agents.update' => $target->update($input['agentId'], array_diff_key($input, ['agentId' => true])),
             'agents.resendTesterInvite', 'agents.removeTester' => $target->$method($input['agentId'], $input['phoneNumber']),
             default => $target->$method($input),
@@ -262,4 +280,4 @@ if (is_file($fixtures)) {
     }
 }
 
-echo "RCS PHP contracts passed (agents create/list/get/update/validate/submit/archive, multipart asset upload, registration drafts and link filters, messages send/validate/estimate/capabilities/get/list, getMessage, getMessages)\n";
+echo "RCS PHP contracts passed (agents create/list/get/update/validate/submit/archive/createEntryPoints, multipart asset upload, registration drafts and link filters, messages send/sendBatch/validate/estimate/capabilities/get/list, getMessage, getMessages)\n";

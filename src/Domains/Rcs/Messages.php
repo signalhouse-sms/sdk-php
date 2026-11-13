@@ -20,7 +20,7 @@ use SignalHouse\SDK\HttpClient;
  */
 class Messages
 {
-    /** The body keys of a send or a validate. */
+    /** The body keys of a send, a batch send or a validate. */
     private const SEND_KEYS = [
         'agentId', 'recipients', 'templateId', 'templateVersion', 'content', 'contentFormat', 'trafficType', 'ttlSeconds',
         'expireTime', 'fallback', 'statusCallbackUrl', 'enableShortlink', 'isTest', 'simulate',
@@ -63,6 +63,30 @@ class Messages
     {
         $this->client->require(['agentId' => $params['agentId'] ?? null, 'recipients' => $params['recipients'] ?? null]);
         return $this->client->request('/message/rcs', array_merge([
+            'method' => 'POST',
+            'body' => self::body(self::SEND_KEYS, $params),
+        ], $options));
+    }
+
+    /**
+     * Send an RCS message to up to 10,000 recipients in the background. The request runs the send's request checks,
+     * splits the recipients into chunks of 100, queues each chunk and answers 202. Every message carries the shared
+     * bulkId; track progress with the messages list filtered by bulkId (GET /message?bulkId=) and per-message webhooks.
+     * A chunk the wallet cannot cover, or that is refused after acceptance, gets BLOCKED messages with blockReason
+     * INSUFFICIENT_FUNDS or SEND_REFUSED; a chunk that keeps failing gets SEND_FAILED. Pass $options['idempotencyKey']
+     * to make a retry safe (same bulkId, no duplicate sends); a retry without one may send duplicates.
+     *
+     * @param array $params The send parameters; recipients holds up to 10,000. templateVersion is pinned when the batch
+     *     is accepted, and ttlSeconds counts from when each chunk is sent. Unset or null keys are omitted.
+     * @param array $options Additional request options
+     * @return array The response whose data is ['bulkId', 'status' => 'ACCEPTED', 'recipientCount'] (202). A
+     *     recipient from 19999990000 to 19999990359 makes the whole request a simulation, as on send
+     * @throws ValidationException If agentId or recipients is missing
+     */
+    public function sendBatch(array $params, array $options = []): array
+    {
+        $this->client->require(['agentId' => $params['agentId'] ?? null, 'recipients' => $params['recipients'] ?? null]);
+        return $this->client->request('/message/rcs/batch', array_merge([
             'method' => 'POST',
             'body' => self::body(self::SEND_KEYS, $params),
         ], $options));
@@ -156,7 +180,8 @@ class Messages
      *
      * @param string $messageId The message ID
      * @param array $options Additional request options
-     * @return array The response whose data is the message; an unknown ID is a 404
+     * @return array The response whose data is the message; an unknown ID is a 404. A settled RCS message carries
+     *     carrierFeeMicros, the carrier pass-through and media surcharge it was charged
      * @throws ValidationException If messageId is missing
      */
     public function get(string $messageId, array $options = []): array
@@ -179,7 +204,7 @@ class Messages
      *     RICH_MEDIA), deliveredChannel? (rcs, sms or mms), isTest? (true for test messages only, false to leave them
      *     out)
      * @param array $options Additional request options
-     * @return array The response from the server
+     * @return array The response from the server; a settled RCS message carries carrierFeeMicros
      * @throws ValidationException If groupId, from or to is missing
      */
     public function list(array $params, array $options = []): array

@@ -444,6 +444,8 @@ MESSAGES  ($signalHouse->messages)
     An outbound RCS message and its fallback leg also carry costBreakdown,
     { legs: [{ messageId, channel, billed, billingClass, segments, baseMicros,
     carrierMicros, rated }] }, which is null when it cannot be computed.
+    A settled RCS message also carries carrierFeeMicros, the carrier
+    pass-through and media surcharge it was charged.
 
   getMessageInteractions(string $id, array $options = [])
     GET /message/:id/interactions. The taps on one RCS message, oldest first. Required: id
@@ -453,6 +455,21 @@ MESSAGES  ($signalHouse->messages)
       ?string $phoneNumber, ?string $carrier,
       ?string $startDate, ?string $endDate, ?array $options)
     Get aggregated message analytics.
+
+  getConsentRecords(array $params = [], array $options = [])
+    GET /message/dnc/consent-records. Export the group's consent ledger,
+    newest first: one append-only record per opt-out or opt-in a recipient
+    gave (a STOP or START keyword, or an opt-out link confirmation). It
+    records only; sends do not read it. $params: groupId (required),
+    recipientPhoneNumber (one handset, matched on its digits), startDate,
+    endDate (filter occurredAt: a bare date is its whole UTC day, a timestamp
+    is bound as sent), page, limit (default 100, max 500).
+    Returns: { data, total, page, limit }. Each record: groupId, subgroupId,
+    recipientPhoneNumber, phoneNumber (the business number or RCS agent id),
+    scope { type: CAMPAIGN|AGENT|SUBGROUP, id }, clearedScopes (for OPT_IN, every
+    { type, id } the START cleared; empty for OPT_OUT), action (OPT_OUT|OPT_IN),
+    source (KEYWORD|LINK), keyword, messageType (SMS|MMS|RCS), messageId,
+    actor { type: "RECIPIENT" }, occurredAt, createdAt.
 
   sendSMS(string $senderPhoneNumber, array $recipientPhoneNumbers,
       string $messageBody, ?string $statusCallbackUrl,
@@ -661,6 +678,38 @@ USERS  ($signalHouse->users)
   updateNotificationPreferences(string $id,
       array $notificationPreferences, ?array $options)
     Update notification preferences.
+
+
+VERIFY  ($signalHouse->verify)
+--------------------------------------------------------------------------------
+  Carrier phone-number checks under /verify. Phone numbers are in international
+  format (e.g. "+12025550123"). Every check the carrier answers is billed to the
+  group's wallet (cost, in microdollars); 402 on insufficient funds. A check the
+  carrier cannot run for the number returns 422 and is not charged.
+
+  checkSimSwap(string $phoneNumber, ?int $maxAge, ?bool $includeSwapDate,
+      ?array $options)
+    POST /verify/sim-swap. Whether the number's SIM changed within maxAge hours
+    (1-2400; the carrier's default when omitted). includeSwapDate: true adds
+    latestSimChange (no extra charge). Roles: api, admin, developer.
+    Returns { checkId, phoneNumber, swapped, maxAge, latestSimChange?, cost }.
+
+  startNumberVerification(string $phoneNumber, ?string $devicePhoneNumber,
+      ?string $redirectUrl, ?array $options)
+    POST /verify/number. Returns 201 { checkId, phoneNumber, status: "PENDING",
+    authorizationUrl, expiresAt }. The end user's phone must open
+    authorizationUrl on mobile data (Wi-Fi off) within 10 minutes.
+    devicePhoneNumber is the phone's own number, sent to the carrier as a login
+    hint; redirectUrl (https) receives the browser afterwards with ?checkId=...
+    Roles: api, admin, developer.
+
+  getNumberVerification(string $checkId, ?array $options)
+    GET /verify/number/:checkId. Returns { checkId, phoneNumber, status,
+    devicePhoneNumberVerified, failureReason, createdAt, expiresAt,
+    completedAt, cost }. status: PENDING, VERIFIED, NOT_VERIFIED, FAILED or
+    EXPIRED; failureReason: NOT_COMPLETED, NOT_APPLICABLE, PROVIDER_ERROR or
+    null. Only VERIFIED and NOT_VERIFIED are billed. 404 if not found.
+    Roles: api, admin, developer, billing, user.
 
 
 WEBHOOKS  ($signalHouse->webhooks)
@@ -1129,7 +1178,7 @@ flag is off. To use a new brand and campaign, create the brand
 The agent: {agentId, groupId, subgroupId, status, registrationStatus, stage,
 brandId, brandRef, campaignId, campaignRef, links, agent, consent, useCase,
 billingCategory, defaultFallback, excludedCarriers, testers, contact,
-testerInvites, carriers, launchable, review, redlineDiff, submittedAt, approvedAt, history,
+testerInvites, carriers, carrierUpdate, autofill, launchable, review, redlineDiff, submittedAt, approvedAt, history,
 createdAt,
 updatedAt}. launchable is true
   when the launch request would be accepted now. brandRef and campaignRef are the
@@ -1140,6 +1189,19 @@ NONE, ...}}; a deleted brand or campaign reads MISSING. status: DRAFT,
 PENDING_REVIEW, REJECTED, AGENT_CREATING (approved, waiting for the carrier
 launch), ARCHIVE_PENDING (waiting for the carrier partner to
 cancel it), ARCHIVED.
+
+carrierUpdate is null, or { status: REQUESTED | SENT, carriers, requestedAt,
+requestedBy, sentAt, sentBy }: the corrected launch answers the customer sent to
+Signal House after a carrier rejected a launch other carriers took (status
+PARTIALLY_LAUNCHED with a REJECTED carrier). In that state an update may change
+only consent and contact, nothing is pushed to the carrier partner, and
+requestCarrierUpdate sends the update to Signal House, which emails it to the
+carrier partner. autofill holds one marker per prefilled field, keyed by its
+path (consent.optInDetails): { source: brand | campaign | landing, sourceId, at,
+edited }. The API marks the fields it fills from the campaign or the brand's
+landing page; send autofill on create or update for the fields you prefilled.
+Omitted on update, the stored markers stay, and a marker turns edited once its
+field changes.
 
 Body fields: agent (name, description, color, logoUrl, heroUrl, phone,
 website, email, phoneLabel, websiteLabel, emailLabel (captions, max 40;
@@ -1168,6 +1230,8 @@ Only these keys and brandId / campaignId are sent.
 
   get(string $agentId, array $options = [])
     GET /rcs/agent/:agentId. One agent with the live state of its links.
+    googleAgentId is Google's id for the agent, null until Google has created
+    it.
 
   update(string $agentId, array $params, array $options = [])
     PUT /rcs/agent/:agentId with brandId?, campaignId?, agent?, consent?,
@@ -1187,6 +1251,9 @@ Only these keys and brandId / campaignId are sent.
     a billingCategory; otherwise 400 with details {code:
     "REGISTRATION_INCOMPLETE", errors, warnings}. The agent moves to
     AGENT_CREATING, then IN_TESTING once the partner reports it ready.
+    A group that has not finished account verification gets 403 with code
+    GROUP_UNVERIFIED, and a rejected group 403 with code GROUP_REJECTED; a
+    pending verification passes.
 
   launch(string $agentId, array $options = [], ?bool $acknowledgeFees = null,
          ?bool $acknowledgePhi = null)
@@ -1196,6 +1263,16 @@ Only these keys and brandId / campaignId are sent.
     Signal House's approval files the launch with the carrier partner. Allowed
     from IN_TESTING, REJECTED and CARRIER_REJECTED (409 otherwise); a failed
     requirement is 400 REGISTRATION_INCOMPLETE.
+    The launch text must also pass the carriers' copy rules. Each failure is an
+    error whose code is the carrier partner's key:
+    OPT_IN_MSG_BRAND_NAME_MISSING, OPT_IN_MSG_FREQ_DISCL_MISSING,
+    OPT_IN_MSG_HELP_INSTR_MISSING, OPT_IN_MSG_RATE_DISCL_MISSING,
+    REG_BRAND_IN_OPT_IN_CONF_MESSAGE_MISSING, HELP_BRAND_NAME_MISSING,
+    HELP_SUPP_CONTACT_MISSING, OPT_OUT_BRAND_NAME_MISSING,
+    OPT_OUT_NO_CESSATION_CONF, SAMPLE_MSG_BRAND_NAME_MISSING,
+    SAMPLE_RATE_DISCL_MISSING, SAMPLE_HAS_PUBLIC_URL_SHORTENER. The brand-name
+    rules look for the brand's display name. 403 GROUP_UNVERIFIED and
+    GROUP_REJECTED as on submit.
     When any fee is due the request needs $acknowledgeFees, or it gets a 400
     with code FEE_ACKNOWLEDGEMENT_REQUIRED and nothing is held.
     The request charges the agent's launch fees: a wallet that cannot cover
@@ -1210,6 +1287,14 @@ Only these keys and brandId / campaignId are sent.
     agent update cannot set it. Once recorded, a later launch request needs no
     new acknowledgement.
 
+  requestCarrierUpdate(string $agentId, array $options = [])
+    POST /registration/:agentId/carrier-update. Send Signal House the corrected
+    launch answers after a carrier rejected a launch other carriers took; edit
+    consent and contact first. Returns the agent's registration with
+    data.carrierUpdate REQUESTED for the rejected carriers; it reads SENT once
+    Signal House sent it. 409 when no carrier is REJECTED after a partial
+    launch, or an update already waits.
+
   archive(string $agentId, array $options = [])
     POST /rcs/agent/:agentId/archive. Archive the agent.
     One the carrier partner created stops sending at once and stays ARCHIVE_PENDING until
@@ -1220,6 +1305,19 @@ Only these keys and brandId / campaignId are sent.
     POST /rcs/agent/:agentId/testers/:phoneNumber/resend. Resend a tester's expired invitation.
   removeTester(string $agentId, string $phoneNumber, array $options = [])
     DELETE /rcs/agent/:agentId/testers/:phoneNumber. Remove a tester at once, at any point before the agent is archived.
+
+  createEntryPoints(string $agentId, ?string $body = null, array $options = [])
+    POST /rcs/agent/:agentId/entry-points. Make the links that start a chat
+    with the agent: an sms: deep link in Google's format, and a short link
+    that redirects to it, for a QR code. With the agent's
+    defaultFallback.from, the deep link names that number, so a handset that
+    cannot reach the agent texts it. $body (optional, max 1,000 characters)
+    is the message the chat opens with. The same request returns the same
+    short link. The links reach approved testers until a carrier launches the
+    agent. 409 with code GOOGLE_AGENT_PENDING before Google has created the
+    agent.
+    Required: agentId
+    Returns: { googleAgentId, deepLink, shortLink }
 
   uploadAsset(string $agentId, array $params, array $options = [])
     POST /rcs/agent/:agentId/asset, multipart fields kind and file. $params:
@@ -1264,6 +1362,20 @@ RCS MESSAGES  ($signalHouse->rcs->messages)
     simulation, as on SMS: it returns { simulated: true, webhooks } and nothing
     is stored, sent or charged.
 
+  sendBatch(array $params, array $options = [])
+    POST /message/rcs/batch. Send to up to 10,000 recipients in the
+    background. Takes the same arguments as send. The request runs the
+    send's request checks, splits the recipients into chunks of 100, queues
+    each chunk and answers 202. Every message carries the shared bulkId;
+    track progress with the messages list filtered by bulkId (GET
+    /message?bulkId=) and per-message webhooks. A chunk the wallet cannot
+    cover, or that is refused after acceptance, gets BLOCKED messages with
+    blockReason INSUFFICIENT_FUNDS or SEND_REFUSED; a chunk that keeps
+    failing gets SEND_FAILED. A retry with an idempotency key is safe (same
+    bulkId, no duplicate sends); a retry without one may send duplicates.
+    Required: agentId, recipients
+    Returns: { bulkId, status: "ACCEPTED", recipientCount } (202)
+
   validate(array $params, array $options = [])
     POST /message/rcs/validate. Check a send; writes nothing. Takes the same
     arguments as send. Required: agentId, recipients
@@ -1303,7 +1415,9 @@ RCS MESSAGES  ($signalHouse->rcs->messages)
 
   get(string $messageId, array $options = [])
     GET /message/:messageId. Get one message; the same route as
-    $signalHouse->messages->getMessage. Required: messageId
+    $signalHouse->messages->getMessage. A settled RCS message carries
+    carrierFeeMicros, the carrier pass-through and media surcharge it was
+    charged. Required: messageId
 
   list(array $params, array $options = [])
     GET /message with messageType=RCS. $params: groupId, from (sent as
@@ -1312,5 +1426,5 @@ RCS MESSAGES  ($signalHouse->rcs->messages)
     fallbackReason?, billingClass?, deliveredChannel?, isTest?.
     Required: groupId, from, to
 
-  Pass ['idempotencyKey' => $uuid] as $options on send to make a retry safe (see
-  IDEMPOTENT REQUESTS).
+  Pass ['idempotencyKey' => $uuid] as $options on send and sendBatch to make a
+  retry safe (see IDEMPOTENT REQUESTS).
