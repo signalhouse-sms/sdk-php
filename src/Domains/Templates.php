@@ -102,7 +102,8 @@ class Templates
     /**
      * Publish the template's current draft. A block whose text or image the Moderation API flags is an error with code
      * CONTENT_POLICY_FLAGGED, whose message names the category ("Content moderation flagged this text: spam"). The check
-     * passes when the Moderation API fails.
+     * passes when the Moderation API fails. An image URL with a variable is moderated at send instead, with its value
+     * filled in, and a refused image blocks the recipient with MODERATION.
      *
      * @param string $templateId The template ID
      * @param array $params groupId
@@ -221,7 +222,8 @@ class Templates
      * @param array $params groupId, file (a file path or an open resource/stream), fileName? (the part's filename)
      * @param array $options Additional request options
      * @return array The response whose data is ['mediaId', 'groupId', 'url', 'bytes', 'mimeType', 'kind', 'width',
-     *     'height', 'createdAt'] (201)
+     *     'height', 'variants', 'createdAt'] (201). An image over 1920 px or 5,000,000 bytes is stored compressed;
+     *     variants.mms is the MMS copy of an image over the MMS size limit.
      * @throws ValidationException If groupId or file is missing
      */
     public function uploadMedia(array $params, array $options = []): array

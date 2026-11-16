@@ -120,7 +120,7 @@ class Messages
      *     linked campaign). Unset or null keys are omitted.
      * @param array $options Additional request options
      * @return array The response whose data is ['billingClass', 'segments', 'recipientCount', 'rcsLeg', 'fallbackLeg',
-     *     'totals', 'balance', 'issues', 'warnings'], issues listing what would block the send and warnings what an iPhone draws differently. rcsLeg.mediaSurcharge is the carrier's surcharge on media over 5 MB for one recipient, and rcsLeg.cost already holds it for every recipient; rcsLeg.cost is null with the fallback mode sms_only; a message over 100 MB adds a MEDIA_TOO_LARGE issue.
+     *     'totals', 'balance', 'issues', 'warnings'], issues listing what would block the send and warnings what an iPhone draws differently. rcsLeg.mediaSurcharge is the carrier's surcharge on media over 5 MB for one recipient, and rcsLeg.cost already holds it for every recipient; rcsLeg.cost is null with the fallback mode sms_only; a message over 100 MB adds a MEDIA_TOO_LARGE issue, and an external media URL that redirects adds a MEDIA_REDIRECT issue.
      * @throws ValidationException If agentId is missing
      */
     public function estimate(array $params, array $options = []): array

@@ -327,6 +327,9 @@ BRANDS  ($signalHouse->brands)
   getAppealHistory(string $brandId, ?array $options)
     List identity status appeals for a brand.
 
+  getBrandFeedback(string $brandId, ?array $options)
+    Read TCR's identity feedback: why TCR could not verify the brand.
+
   submitAppeal(string $brandId, array $appealCategories, string $explanation,
       ?string $filePath, ?array $options)
     Submit a brand identity status appeal with supporting documentation.
@@ -1121,12 +1124,18 @@ validate send each block's text and images to the Moderation API: a flag is an
 error {severity:"error", code:"CONTENT_POLICY_FLAGGED", path, message, blockId}
 whose message names the category, for example "Content moderation flagged this
 text: spam". The check passes when the Moderation API fails, and saving a draft
-does not run it. capabilities returns the
+does not run it. An image URL with a variable is moderated at send instead, with
+its value filled in, and a refused image blocks the recipient with MODERATION.
+capabilities returns the
 server's block kinds, action types, limits, media rules, time to live ranges,
 traffic types per use case and iPhone layout numbers, and with provider
 (infobip|sinch) that provider's limits and unsupported features.
 uploadMedia sends multipart fields file and groupId and returns
-{mediaId, url, bytes, mimeType, kind, width, height, ...} (201).
+{mediaId, url, bytes, mimeType, kind, width, height, variants, ...} (201).
+An image over 1920 px on its longest edge or over 5,000,000 bytes is compressed
+to both, and bytes, width and height describe the stored file. An image over the
+MMS size limit also gets an MMS copy, variants.mms {url, bytes}, which an MMS
+fallback leg sends; variants is {} otherwise.
 
 The body is the raw RcsTemplateBody {channel:"rcs", contentFormat?, content,
 variables, defaults, fallback}; the SDK sends it unchanged and offers no
@@ -1140,6 +1149,25 @@ one for an author (400 LOCATION_NOT_FOUND, 429 past the group's lookup window,
 Placeholders are {{key}}; {{sender_name}} is reserved. Writes accept an
 idempotency key. Reads (including validate and capabilities) need
 admin, developer, api, billing or user; writes need admin, developer or api.
+
+Each variable may set missingPolicy, what a recipient with no value gets:
+default (the variable's default, empty when none is declared), block (the
+recipient is blocked with VARIABLE_MISSING, even with a default) or drop (the
+send leaves out each block that uses the variable, a message block with its
+suggestions blocks; a drop that leaves nothing to send blocks with
+VARIABLE_MISSING). Without missingPolicy, a missing value takes the default,
+else VARIABLE_MISSING when required, else an empty value. An empty value, or
+one of only spaces, counts as no value.
+
+Placeholders go in text, card titles and descriptions, button labels and
+fallback text. A url variable may fill a whole link or media URL, and any
+variable may fill the path, query or fragment of a URL whose scheme and host are
+written out, percent-encoded. A dial number takes one phoneNumber variable and
+each calendar time one dateTime variable, for the whole field. A calendar title
+and description and postbackData take text; a location's address and label take
+none. Publish checks where each placeholder sits (PLACEHOLDER_NOT_ALLOWED); the
+send checks each filled field and blocks a recipient whose field fails with
+CONTENT_INVALID.
 
 LANGUAGE EXAMPLE
   $body = [
@@ -1381,7 +1409,8 @@ RCS MESSAGES  ($signalHouse->rcs->messages)
     arguments as send. Required: agentId, recipients
     Returns: { valid, errors, warnings, billingClass, segments,
     estimatedCostMicros, unsupportedFiles, recipients }. It runs a send's
-    checks and holds no funds. valid is true only with no errors.
+    checks and holds no funds. valid is true only with no errors. An external
+    media URL that redirects blocks its recipient with a MEDIA_REDIRECT error.
 
   estimate(array $params, array $options = [])
     POST /message/estimate with channel "rcs" added. Price a draft in
@@ -1392,7 +1421,7 @@ RCS MESSAGES  ($signalHouse->rcs->messages)
     Returns: { billingClass, segments, recipientCount, rcsLeg, fallbackLeg,
     totals, balance, issues, warnings }
     rcsLeg.mediaSurcharge is the carrier's surcharge on media over 5 MB for one recipient, and rcsLeg.cost already holds it for every recipient; rcsLeg.cost is null with the fallback mode sms_only; a message over 100 MB adds a MEDIA_TOO_LARGE
-    issue.
+    issue, and an external media URL that redirects adds a MEDIA_REDIRECT issue.
 
   capabilities(string $agentId, array $phoneNumbers, array $options = [])
     POST /rcs/capabilities. Report which numbers (up to 500) can receive RCS.

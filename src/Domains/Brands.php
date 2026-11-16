@@ -325,6 +325,22 @@ class Brands
     }
 
     /**
+     * Get TCR's identity feedback for a brand: why TCR could not verify it (status UNVERIFIED)
+     *
+     * @param string $brandId Brand lookup id (carrier Brand ID, record _id, or internal reference)
+     * @param array $options Additional request options
+     * @return array The response from the server
+     */
+    public function getBrandFeedback(string $brandId, array $options = []): array
+    {
+        $this->client->require(['brandId' => $brandId]);
+        $safeBrandId = rawurlencode($brandId);
+        return $this->client->request("/brand/feedback/{$safeBrandId}", array_merge([
+            'method' => 'GET',
+        ], $options));
+    }
+
+    /**
      * Submit an appeal for a brand
      *
      * @param string $brandId Brand lookup id (carrier Brand ID, record _id, or internal reference)
