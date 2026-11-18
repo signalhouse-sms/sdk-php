@@ -334,6 +334,9 @@ BRANDS  ($signalHouse->brands)
       ?string $filePath, ?array $options)
     Submit a brand identity status appeal with supporting documentation.
     Uses multipart/form-data automatically.
+    TCR refusal: a 4xx (e.g. TCR code 592, brand older than 45 days) returns
+      { error: "TCR refused the appeal: <reason>", details: { code, message } }
+      with TCR's own code and message. Retrying unchanged will be refused again.
     $appealCategories: array of strings (VERIFY_TAX_ID, VERIFY_NON_PROFIT, VERIFY_GOVERNMENT)
     $explanation: string (max 1024 chars)
     $filePath: string path to file (supported: .jpg, .jpeg, .png, .bmp, .raw, .tiff, .pdf, .docx, .htm, .odt, .rtf, .txt, .xml)
@@ -366,6 +369,60 @@ CAMPAIGNS  ($signalHouse->campaigns)
     Sends a POST to /campaign/nudge/:campaignId.
     No request body required.
     Returns 200: { message: "Nudge successful" }
+
+
+COMPLIANCE  ($signalHouse->compliance)
+--------------------------------------------------------------------------------
+  Compliance cases under /compliance. Signal House opens a case when a carrier
+  suspends one of your objects, a carrier escalates a message, or Signal House
+  needs something from you. You read your cases, answer their requirements and
+  upload files; only Signal House opens, works and closes them.
+
+  Number release closes that number's alerts immediately. Eligible cases have
+  closeReason NUMBER_RELEASED; shared cases stay open for other alerts,
+  requirements or review. Released blocks include numberReleasedAt without
+  inventing liftedAt.
+
+  getCases(?string $groupId, ?string $status, ?string $stage,
+      ?string $objectType, ?string $objectId, ?string $subgroupId,
+      ?bool $suspended, ?string $from, ?string $to, ?string $sort,
+      ?int $page, ?int $limit, ?array $options)
+    GET /compliance/cases. Lists the cases you can see, newest first. Only the
+    filters you pass are sent. groupId defaults to your active group.
+    status: OPEN, LIFT_REQUESTED or CLOSED. stage: new, customer, ready,
+    lift_requested or closed. objectType: CAMPAIGN, BRAND, NUMBER, RCS_AGENT or
+    SUBGROUP. suspended: true for cases with an open suspension or hold, false
+    for the rest. from/to: ISO 8601 bounds on when the case opened. sort:
+    createdAt (default), fixBy or severity. limit: 1-200.
+    Returns { data, total, page, limit, totalPages,
+    counts: { open, waitingOnYou } }. waitingOnYou is the open cases with
+    requirements still to answer. Roles: api, admin, developer, billing, user.
+
+  getCase(string $caseId, ?array $options)
+    GET /compliance/cases/:caseId. Returns one case (CASE-...) with its stage,
+    suspensions, tickets and requirements.
+    Roles: api, admin, developer, billing, user.
+
+  answerRequirement(string $caseId, string $requirementId, ?string $answer,
+      ?array $fileIds, ?array $options)
+    PUT /compliance/cases/:caseId/requirements/:requirementId with
+    { answer?, fileIds? } (null values omitted). answer: what you did, up to
+    2,000 characters. fileIds: up to 10 fileIds from uploadFile, on this case.
+    A RECORDS requirement needs a file or a note. Returns the case.
+    Roles: api, admin, developer, user.
+
+  uploadFile(string $caseId, string|resource $file, ?string $requirementId,
+      ?string $fileName, ?array $options)
+    POST /compliance/files as multipart/form-data with caseId, requirementId
+    (when given) and file. CSV, XLSX, PDF, PNG, JPG or TXT, up to 10 MB.
+    The API recognizes a CSV or TXT by its filename: pass $fileName for a
+    stream that has no path.
+    Returns 201 { fileId, fileName, mimeType, size }. Pass fileId in fileIds
+    when you answer the requirement. Roles: api, admin, developer, user.
+
+  getFile(string $fileId, ?array $options)
+    GET /compliance/files/:fileId. Downloads the file bytes.
+    Roles: api, admin, developer, billing, user.
 
 
 GROUPS  ($signalHouse->groups)

@@ -10,6 +10,7 @@ use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
 use SignalHouse\SDK\Domains\Brands;
 use SignalHouse\SDK\Domains\Campaigns;
+use SignalHouse\SDK\Domains\Compliance;
 use SignalHouse\SDK\Domains\Landings;
 use SignalHouse\SDK\Domains\Messages;
 use SignalHouse\SDK\Domains\Numbers;
@@ -41,6 +42,8 @@ $cases = [
     'uploadOptInImage' => [fn () => (new Campaigns($client, $multipartClient, false))->uploadOptInImage($image), '/campaign/opt-in-image', ['file']],
     'uploadSampleMedia' => [fn () => (new Campaigns($client, $multipartClient, false))->uploadSampleMedia($image), '/campaign/sample-media', ['file']],
     'uploadSampleMediaForGroup' => [fn () => (new Campaigns($client, $multipartClient, false))->uploadSampleMedia($image, [], 'G0000001'), '/campaign/sample-media', ['groupId', 'file']],
+    'complianceUploadFile' => [fn () => (new Compliance($client, $multipartClient, false))->uploadFile('CASE-1', $image), '/compliance/files', ['caseId', 'file']],
+    'complianceUploadFileForRequirement' => [fn () => (new Compliance($client, $multipartClient, false))->uploadFile('CASE-1', $image, 'CASE-1-1'), '/compliance/files', ['caseId', 'requirementId', 'file']],
     'createShortCodeCampaign' => [fn () => (new Campaigns($client, $multipartClient, false))->createShortCodeCampaign(['brandId' => 'B1']), '/campaign/short-code', ['campaignData']],
     'requestShortCodeAcquisition' => [fn () => (new Numbers($client, $multipartClient, false))->requestShortCodeAcquisition(['subgroupId' => 'S1', 'brandId' => 'B1', 'campaignId' => 'C1', 'requestType' => 'EXTERNAL_LEASE'], [], $image), '/number/short-code', ['acquisitionData', 'leaseReceipt']],
     'submitAppeal' => [fn () => (new Brands($client, $multipartClient, false))->submitAppeal('B1', ['VERIFY_TAX_ID'], 'why', $image), '/brand/appeal/B1', ['file', 'appealCategories', 'explanation']],

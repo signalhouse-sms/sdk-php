@@ -47,6 +47,63 @@ class Subgroups
     }
 
     /**
+     * Resolve the mapping between a GoHighLevel location and a Signal House subgroup, in either
+     * direction. Provide exactly one of ghlLocationId or subgroupId.
+     *
+     * @param array $params Filter parameters: groupId (optional - customer roles default to their own
+     *                       accessible group(s) and are rejected if they name a group they don't belong
+     *                       to; a subgroupId/ghlLocationId that belongs to a different group than the
+     *                       caller's returns a 404, identical to a nonexistent one), ghlLocationId,
+     *                       subgroupId.
+     * @param array $options Additional request options
+     * @return array The response from the server: groupId, subgroupId, subgroupName, ghlLocationId, ghlLocationName
+     */
+    public function lookupGhlLocation(array $params = [], array $options = []): array
+    {
+        $queryString = $this->client->getQueryString($params);
+        return $this->client->request("/subgroup/ghl-location-lookup{$queryString}", array_merge([
+            'method' => 'GET',
+        ], $options));
+    }
+
+    /**
+     * Link (or, with ghlLocationId null, unlink) a GoHighLevel location to a subgroup.
+     * Requires signalhouse_api or signalhouse_admin role. At most one subgroup may hold a given
+     * ghlLocationId; linking it here steals it from any other subgroup that currently holds it.
+     *
+     * @param string $subgroupId The subgroup to link
+     * @param string|null $ghlLocationId The GHL location ID to link, or null to unlink
+     * @param string|null $ghlLocationName Display name of the GHL location. Omit (do not pass this
+     *                    argument) to leave the subgroup's currently stored name untouched (only when
+     *                    ghlLocationId is unchanged - otherwise it is cleared); always cleared when
+     *                    unlinking.
+     * @param string|\DateTimeInterface|null $claimedAt When this link was locally claimed by the
+     *                    caller. Required when linking ($ghlLocationId is not null) - used to detect
+     *                    and reject a delayed/out-of-order push whose claim has since been superseded
+     *                    by a newer one recorded elsewhere. Ignored when unlinking.
+     * @param array $options Additional request options
+     * @return array The response from the server: the updated subgroup
+     */
+    public function linkGhlLocation(string $subgroupId, ?string $ghlLocationId, ?string $ghlLocationName = null, string|\DateTimeInterface|null $claimedAt = null, array $options = []): array
+    {
+        $this->client->require(['subgroupId' => $subgroupId]);
+        if ($ghlLocationId !== null) {
+            $this->client->require(['claimedAt' => $claimedAt]);
+        }
+        $body = ['subgroupId' => $subgroupId, 'ghlLocationId' => $ghlLocationId];
+        if ($ghlLocationName !== null) {
+            $body['ghlLocationName'] = $ghlLocationName;
+        }
+        if ($claimedAt !== null) {
+            $body['claimedAt'] = $claimedAt instanceof \DateTimeInterface ? $claimedAt->format(\DateTimeInterface::ATOM) : $claimedAt;
+        }
+        return $this->client->request('/subgroup/ghl-location-link', array_merge([
+            'method' => 'PUT',
+            'body' => $body,
+        ], $options));
+    }
+
+    /**
      * Create a new subgroup
      *
      * @param array $subgroupData The subgroup data (groupId, subgroupName, contact info, address, optional carrierIdFamily/carrierIdRegion, etc.). Setting carrierIdFamily/carrierIdRegion requires signalhouse_api, signalhouse_admin, signalhouse_user, api, admin, developer, or billing role.

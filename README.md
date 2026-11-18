@@ -67,6 +67,7 @@ $wallet = $sdk->billing->getWallet('G12345678');
 | `$sdk->billing` | Wallet, payment methods, transactions, invoices, fees |
 | `$sdk->brands` | 10DLC and toll-free brand registration and management |
 | `$sdk->campaigns` | 10DLC campaign management |
+| `$sdk->compliance` | Compliance cases Signal House opens: read cases, answer their requirements, upload and download files |
 | `$sdk->groups` | Group management |
 | `$sdk->landings` | Landing page management (with file uploads) |
 | `$sdk->templates` | Versioned message templates: drafts, publish, archive, validate, capabilities, media upload |

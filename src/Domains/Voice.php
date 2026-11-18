@@ -12,6 +12,7 @@ use SignalHouse\SDK\Domains\Voice\CallLogs;
 use SignalHouse\SDK\Domains\Voice\Analytics;
 use SignalHouse\SDK\Domains\Voice\GlobalVoiceSettings;
 use SignalHouse\SDK\Domains\Voice\Tokens;
+use SignalHouse\SDK\Domains\Voice\CallFlows;
 
 /**
  * Voice domain — wraps the Voice service (mounted under /voice).
@@ -21,6 +22,7 @@ use SignalHouse\SDK\Domains\Voice\Tokens;
  *  - $sdk->voice->sipProfiles               — SIP profile / endpoint (single registerable UA)
  *  - $sdk->voice->programmableVoiceProfiles — Programmable Voice Profile (route a set of numbers through Signal House)
  *  - $sdk->voice->numberRoutes              — Per-number inbound route (overrides the profile and subgroup settings)
+ *  - $sdk->voice->callFlows                 — Call flows: customer-built call trees a number or profile can run
  *  - $sdk->voice->calls                     — Outbound call origination + call log queries
  *  - $sdk->voice->callLogs                  — Account-scoped call history: list/get + presigned recording
  *  - $sdk->voice->analytics                 — Aggregated call metrics (summary tiles + byDate/byNumber/byCarrier breakdowns)
@@ -38,6 +40,7 @@ class Voice
     public Analytics $analytics;
     public GlobalVoiceSettings $globalVoiceSettings;
     public Tokens $tokens;
+    public CallFlows $callFlows;
 
     public function __construct(HttpClient $client, bool $enableAdmin)
     {
@@ -50,5 +53,6 @@ class Voice
         $this->analytics = new Analytics($client, $enableAdmin);
         $this->globalVoiceSettings = new GlobalVoiceSettings($client, $enableAdmin);
         $this->tokens = new Tokens($client, $enableAdmin);
+        $this->callFlows = new CallFlows($client, $enableAdmin);
     }
 }

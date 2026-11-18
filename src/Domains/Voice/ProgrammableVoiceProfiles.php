@@ -17,17 +17,20 @@ use SignalHouse\SDK\HttpClient;
  *  - name               (string, required for create) Profile name.
  *  - subgroupIds        (string[], required for create) Subgroups this profile spans.
  *  - region             (string, optional) Region/POP label.
- *  - routeAction        (string, optional) FORWARD|WEBRTC|SIP_TRUNK|SIP_PROFILE|CALL_CONTROL (default FORWARD).
+ *  - routeAction        (string, optional) FORWARD|WEBRTC|SIP_TRUNK|SIP_PROFILE|CALL_CONTROL|CALL_FLOW (default FORWARD).
  *                       Deliver the call to a PSTN number (FORWARD), ring the profile's subgroup
  *                       registered softphones (WEBRTC), send to a SIP trunk (SIP_TRUNK), ring a
- *                       registered SIP endpoint (SIP_PROFILE), or hand the call to your programmable
- *                       call-control webhook that returns SHML (CALL_CONTROL).
+ *                       registered SIP endpoint (SIP_PROFILE), hand the call to your programmable
+ *                       call-control webhook that returns SHML (CALL_CONTROL), or run a call
+ *                       flow (CALL_FLOW).
  *  - forwardToE164      (string, optional) Destination number, required when routeAction is FORWARD.
  *  - forwardAfterSeconds(int, optional) Ring seconds before the action fires.
  *  - routeSipTrunkId    (string, optional) SIP trunk id, required when routeAction is SIP_TRUNK.
  *  - routeSipProfileId  (string, optional) SIP endpoint id, required when routeAction is SIP_PROFILE.
  *  - webhookUrl         (string, optional) Inbound voice webhook / SHML program URL, required when
  *                       routeAction is CALL_CONTROL.
+ *  - routeCallFlowId    (string, optional) Call flow id, required when routeAction is CALL_FLOW.
+ *                       Must be in one of the profile's subgroups.
  *  - recordingEnabled   (bool, optional) Record calls on this profile.
  *  - enabled            (bool, optional) Active state (default true).
  *

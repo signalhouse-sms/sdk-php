@@ -11,7 +11,7 @@ use SignalHouse\SDK\HttpClient;
  * takes priority over its Programmable Voice Profile and subgroup voice settings.
  *
  * Route fields (camelCase, sent as given):
- *  - routeAction         (string, required) FORWARD|WEBRTC|SIP_TRUNK|SIP_PROFILE|CALL_CONTROL|AI|VOICEMAIL.
+ *  - routeAction         (string, required) FORWARD|WEBRTC|SIP_TRUNK|SIP_PROFILE|CALL_CONTROL|AI|VOICEMAIL|CALL_FLOW.
  *  - forwardToE164       (string, optional) FORWARD destination (required for FORWARD), or the WEBRTC
  *                        no-answer destination when noAnswerAction is FORWARD.
  *  - noAnswerAction      (string, optional) WEBRTC only: VOICEMAIL|FORWARD|KEEP_RINGING (default VOICEMAIL).
@@ -20,6 +20,9 @@ use SignalHouse\SDK\HttpClient;
  *  - routeSipProfileId   (string, optional) SIP endpoint id, required for SIP_PROFILE.
  *  - webhookUrl          (string, optional) SHML program URL, required for CALL_CONTROL.
  *  - routeAgentProfileId (string, optional) AI agent profile id (AGP...), required for AI.
+ *  - routeCallFlowId     (string, optional) Call flow id, required for CALL_FLOW. Must be in the
+ *                        number's subgroup. It need not be published yet: until it is, calls
+ *                        fall through to the number's profile or subgroup settings.
  *  - recordingEnabled    (bool, optional) Record calls handled by this route.
  *
  * Routes are mounted under /voice/api/v1/numbers/:e164/route on the

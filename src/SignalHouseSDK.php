@@ -7,6 +7,7 @@ use SignalHouse\SDK\Domains\Auth;
 use SignalHouse\SDK\Domains\Billing;
 use SignalHouse\SDK\Domains\Brands;
 use SignalHouse\SDK\Domains\Campaigns;
+use SignalHouse\SDK\Domains\Compliance;
 use SignalHouse\SDK\Domains\Groups;
 use SignalHouse\SDK\Domains\Landings;
 use SignalHouse\SDK\Domains\Templates;
@@ -32,6 +33,7 @@ class SignalHouseSDK
     public Billing $billing;
     public Brands $brands;
     public Campaigns $campaigns;
+    public Compliance $compliance;
     public Groups $groups;
     public Landings $landings;
     public Templates $templates;
@@ -75,6 +77,7 @@ class SignalHouseSDK
         $this->billing = new Billing($client, $enableAdmin);
         $this->brands = new Brands($client, $multipartClient, $enableAdmin);
         $this->campaigns = new Campaigns($client, $multipartClient, $enableAdmin);
+        $this->compliance = new Compliance($client, $multipartClient, $enableAdmin);
         $this->groups = new Groups($client, $enableAdmin);
         $this->landings = new Landings($client, $multipartClient, $enableAdmin);
         $this->templates = new Templates($client, $multipartClient, $enableAdmin);
