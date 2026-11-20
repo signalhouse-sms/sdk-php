@@ -224,6 +224,84 @@ class Groups
     }
 
     /**
+     * Read a group's Ontraport connection status: whether it's connected, and the webhook URL to paste
+     * into an Ontraport automation's "Send to a Webhook" step. Never includes the API Key or App ID.
+     * Role: admin, developer, signalhouse_admin.
+     *
+     * @param string $groupId The group
+     * @param array $options Additional request options
+     * @return array The response from the server (['connected' => ..., 'webhookUrl' => ..., 'enabled' => ...])
+     */
+    public function getOntraportConnection(string $groupId, array $options = []): array
+    {
+        $this->client->require(['groupId' => $groupId]);
+        $queryString = $this->client->getQueryString(['groupId' => $groupId]);
+        return $this->client->request("/group/ontraport{$queryString}", array_merge([
+            'method' => 'GET',
+        ], $options));
+    }
+
+    /**
+     * Connect (or reconnect) a group's Ontraport account. The API Key and App ID are verified with a
+     * read-only call to Ontraport before anything is stored; a bad pair throws rather than saving.
+     * Requires a Signal House Admin to have enabled featureFlags.ontraportIntegration for the group
+     * first (opt-in, off by default) - otherwise this throws a validation error.
+     * Role: admin, developer, signalhouse_admin.
+     *
+     * @param string $groupId The group
+     * @param string $apiKey The Ontraport API Key
+     * @param string $appId The Ontraport App ID
+     * @param array $options Additional request options
+     * @return array The Ontraport connection status (['connected' => ..., 'webhookUrl' => ..., 'enabled' => ...])
+     */
+    public function connectOntraport(string $groupId, string $apiKey, string $appId, array $options = []): array
+    {
+        $this->client->require(['groupId' => $groupId, 'apiKey' => $apiKey, 'appId' => $appId]);
+        return $this->client->request('/group/ontraport', array_merge([
+            'method' => 'PUT',
+            'body' => ['groupId' => $groupId, 'apiKey' => $apiKey, 'appId' => $appId],
+        ], $options));
+    }
+
+    /**
+     * Disconnect (disable) a group's Ontraport account. The webhook stops accepting deliveries
+     * immediately; stored credentials and contact links are kept, so reconnecting the same account
+     * resumes cleanly. The primary self-service way to kill a leaked webhook URL.
+     * Role: admin, developer, signalhouse_admin.
+     *
+     * @param string $groupId The group
+     * @param array $options Additional request options
+     * @return array The response from the server (['connected' => ..., 'webhookUrl' => ..., 'enabled' => ...])
+     */
+    public function disconnectOntraport(string $groupId, array $options = []): array
+    {
+        $this->client->require(['groupId' => $groupId]);
+        $queryString = $this->client->getQueryString(['groupId' => $groupId]);
+        return $this->client->request("/group/ontraport{$queryString}", array_merge([
+            'method' => 'DELETE',
+        ], $options));
+    }
+
+    /**
+     * Mint a fresh webhook token for an existing Ontraport connection, immediately invalidating the
+     * old URL. A second self-service way to kill a leaked webhook URL, for when the customer wants to
+     * keep sending (unlike disconnectOntraport) but needs a new URL to paste into a rebuilt automation.
+     * Role: admin, developer, signalhouse_admin.
+     *
+     * @param string $groupId The group
+     * @param array $options Additional request options
+     * @return array The response from the server (['connected' => ..., 'webhookUrl' => ..., 'enabled' => ...])
+     */
+    public function regenerateOntraportWebhookToken(string $groupId, array $options = []): array
+    {
+        $this->client->require(['groupId' => $groupId]);
+        return $this->client->request('/group/ontraport/regenerate-token', array_merge([
+            'method' => 'PUT',
+            'body' => ['groupId' => $groupId],
+        ], $options));
+    }
+
+    /**
      * Claim an email domain for a group's SSO; the response includes the DNS TXT record that
      * verifies it. Role: admin.
      *

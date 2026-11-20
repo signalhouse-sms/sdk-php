@@ -735,6 +735,7 @@ class Messages
 
     /**
      * Look up the carrier for a phone number. Always fresh (not cached). Billed per request.
+     * An Australian number on ACMA's list of numbers reserved for TV, film and creative works is refused with a 400 as an invalid number, without a lookup or a charge.
      *
      * @param string $phoneNumber The phone number to look up (10+ digits, no + prefix)
      * @param array $options Additional request options
