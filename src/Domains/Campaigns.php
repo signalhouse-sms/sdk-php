@@ -139,7 +139,11 @@ class Campaigns
      * Get a list of campaigns with optional filters
      *
      * @param array $params Filter parameters (id, brandId, subgroupId, groupId, page, limit, status,
-    *                       registrationType). registrationType filters by "TEN_DLC", "TOLL_FREE", or "SHORT_CODE".
+    *                       registrationType, search). registrationType filters by "TEN_DLC", "TOLL_FREE", or "SHORT_CODE".
+     *                      search (string or array of strings): an array sends each value as its own search key, and
+     *                      every value must match. With brandId, subgroupId or groupId, free text matches campaignId;
+     *                      on the staff-only list (no id, brandId, subgroupId or groupId) it matches campaignId and
+     *                      brandId. "field:term" searches campaignId or brandId. Each term is 3 to 100 characters, at most 5 terms.
      * @param array $options Additional request options
      * @return array The response from the server
      *

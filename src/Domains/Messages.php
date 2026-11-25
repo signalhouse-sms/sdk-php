@@ -88,6 +88,8 @@ class Messages
      * @return array The response from the server. Inbound messages also carry sentimentScore
      *     (-100..100, null when unscored), sentimentLabel ("positive", "neutral" or "negative",
      *     null when sentimentScore is null) and sentimentScoredAt. Outbound messages are never scored.
+     *     Inbound messages also carry inReplyToMessageId: the message the reply answers, absent when there is none. If that
+     *     message has a parentMessageId, it was an RCS fallback, and the parent is the RCS message you sent.
      */
     public function getMessages(array $params = [], array $options = []): array
     {
@@ -105,6 +107,8 @@ class Messages
      * @return array The response whose data is the message; an unknown ID is a 404. An outbound RCS message and its fallback
      *     leg also carry costBreakdown, { legs: [{ messageId, channel, billed, billingClass, segments, baseMicros, carrierMicros, rated }] }, which is null when it cannot be computed.
      *     A settled RCS message also carries carrierFeeMicros: the carrier pass-through and media surcharge it was charged
+     *     Inbound messages also carry inReplyToMessageId: the message the reply answers, absent when there is none. If that
+     *     message has a parentMessageId, it was an RCS fallback, and the parent is the RCS message you sent.
      */
     public function getMessage(string $id, array $options = []): array
     {
@@ -496,6 +500,7 @@ class Messages
      * @param string|null $subgroupId Explicit subgroup to attribute the send (and its inbound reply) to. P2P has no dedicated sender number, so pass this to record the send against a specific subgroup; it also resolves the group. Defaults to the group's oldest subgroup.
      * @param array $options Additional request options
      * @return array Standardized response
+     * @deprecated P2P messaging is retired and the API answers 410. This method will be removed in a future major release.
      */
     public function sendP2P(
         string|array $recipientPhoneNumbers,
@@ -544,6 +549,7 @@ class Messages
      * @param string $batchId The ID of the P2P batch to retrieve
      * @param array $options Additional request options
      * @return array The response from the server
+     * @deprecated P2P messaging is retired and the API answers 410. This method will be removed in a future major release.
      */
     public function getP2PBatch(string $batchId, array $options = []): array
     {

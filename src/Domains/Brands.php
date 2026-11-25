@@ -31,10 +31,15 @@ class Brands
      * businessStructure, industry, contactEmail, contactJobTitle, contactJobLevel and rejectionReason (why the
      * brand was rejected, in plain English, or null) in its tollFree.
      *
-     * @param array $params Filter parameters (id, subgroupId, groupId, page, limit, status, registrationType, currentTollFreeCarrier).
+     * @param array $params Filter parameters (id, subgroupId, groupId, page, limit, status, registrationType, currentTollFreeCarrier, search).
     *                      id is a brand lookup id. registrationType filters by "TEN_DLC", "TOLL_FREE", or "SHORT_CODE".
      *                      currentTollFreeCarrier (bool), with groupId or subgroupId: when true, return only the
      *                      toll-free brands a new toll-free campaign in that group can use.
+     *                      search (string or array of strings): an array sends each value as its own search key, and
+     *                      every value must match. With groupId or subgroupId, free text matches brandId, displayName
+     *                      and companyName; on the staff-only list (no id, subgroupId or groupId) it matches all eight
+     *                      fields below. "field:term" searches one of brandId, displayName, companyName, ein, email,
+     *                      groupId, subgroupId, referenceId. Each term is 3 to 100 characters, at most 5 terms.
      *                      Responses may include brandId: null for pending brands.
      *                      Each brand carries `carrierSuspensions` (carrier brand suspension rules; active while liftedAt is null).
      *                      Each brand also carries `cnamName` (its caller name for numbers, or null; see getCallerName).

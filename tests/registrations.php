@@ -9,6 +9,8 @@ require __DIR__ . '/../src/Domains/Messages.php';
 require __DIR__ . '/../src/Domains/Numbers.php';
 require __DIR__ . '/../src/Domains/Shortlinks.php';
 require __DIR__ . '/../src/Domains/Brands.php';
+require __DIR__ . '/../src/Domains/Campaigns.php';
+require __DIR__ . '/../src/Domains/Subgroups.php';
 
 /** Capture serialized requests without sending them; inherits the real query and validation rules. */
 class RegistrationSpyClient extends \SignalHouse\SDK\HttpClient
@@ -216,6 +218,20 @@ try {
 }
 check(count($client->calls) === $sent, 'a refused toll-free requirements read sends nothing');
 
+// Each search value on the four list reads is sent as its own search key; a plain string is sent once.
+$searchLists = [
+    '/subgroup' => [new \SignalHouse\SDK\Domains\Subgroups($client, false), 'getSubgroups'],
+    '/brand' => [$brands, 'getBrands'],
+    '/campaign' => [new \SignalHouse\SDK\Domains\Campaigns($client, $client, false), 'getCampaigns'],
+    '/number' => [$numbers, 'getPhoneNumbers'],
+];
+foreach ($searchLists as $expectedPath => [$domain, $method]) {
+    $domain->$method(['groupId' => 'G1', 'search' => ['apex', 'displayName:dental']]);
+    check(end($client->calls)[0] === "$expectedPath?groupId=G1&search=apex&search=displayName%3Adental", "$method repeats search");
+    $domain->$method(['groupId' => 'G1', 'search' => '(512) 555']);
+    check(end($client->calls)[0] === "$expectedPath?groupId=G1&search=%28512%29+555", "$method sends one search string");
+}
+
 // A toll-free brand's five business details are sent as given, with the rest of the brand.
 $tollFreeBrand = [
     'subgroupId' => 'S0000001', 'displayName' => 'Acme', 'companyName' => 'Acme Inc', 'street' => '1 Main St',
@@ -234,4 +250,4 @@ foreach (['submitBusinessVerification', 'getBusinessVerifications', 'getBusiness
     check(!method_exists($brands, $method), "$method is gone");
 }
 
-echo "Registration PHP contracts passed (7 regional reads, filter options, catalog, quotes, registrations, alphanumeric submission, opt-out links, staff namespace, validation, toll-free brands)\n";
+echo "Registration PHP contracts passed (7 regional reads, filter options, catalog, quotes, registrations, alphanumeric submission, opt-out links, staff namespace, validation, list search, toll-free brands)\n";

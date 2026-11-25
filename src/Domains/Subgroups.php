@@ -18,7 +18,10 @@ class Subgroups
     /**
      * Get a list of subgroups with optional filters
      *
-     * @param array $params Filter parameters (id, groupId, page, limit)
+     * @param array $params Filter parameters (id, groupId, search, page, limit)
+     *                      search (string or array of strings): an array sends each value as its own search key, and
+     *                      every value must match. Free text matches subgroupId, subgroupName and subgroupCompanyName;
+     *                      "field:term" searches one of those fields. Each term is 3 to 100 characters, at most 5 terms.
      * @param array $options Additional request options
      * @return array The response from the server
      */
@@ -106,7 +109,7 @@ class Subgroups
     /**
      * Create a new subgroup
      *
-     * @param array $subgroupData The subgroup data (groupId, subgroupName, contact info, address, optional carrierIdFamily/carrierIdRegion, etc.). Setting carrierIdFamily/carrierIdRegion requires signalhouse_api, signalhouse_admin, signalhouse_user, api, admin, developer, or billing role.
+     * @param array $subgroupData The subgroup data (groupId, subgroupName, contact info, address, etc.). carrierIdFamily/carrierIdRegion are deprecated: accepted and stored, with no effect on billing. Setting carrierIdFamily/carrierIdRegion requires signalhouse_api, signalhouse_admin, signalhouse_user, api, admin, developer, or billing role.
      * @param array $options Additional request options
      * @return array The response from the server
      */
@@ -123,7 +126,7 @@ class Subgroups
      * Update an existing subgroup
      *
      * @param string $id The subgroup ID
-     * @param array $updateData The data to update, including optional carrierIdFamily/carrierIdRegion. Setting carrierIdFamily/carrierIdRegion requires signalhouse_api, signalhouse_admin, signalhouse_user, api, admin, developer, or billing role. May also include cnamAutoApply (bool; turns caller name auto-apply on or off, so eligible numbers get their brand's registered name on outbound calls) and cnamBrandId (string|null; default caller-ID brand for numbers with no campaign, must be a verified brand in this subgroup, required when turning auto-apply on in a subgroup with more than one verified brand). Setting cnamAutoApply/cnamBrandId requires signalhouse_api, signalhouse_admin, signalhouse_user, api, admin, or developer role.
+     * @param array $updateData The data to update. carrierIdFamily/carrierIdRegion are deprecated: accepted and stored, with no effect on billing. Setting carrierIdFamily/carrierIdRegion requires signalhouse_api, signalhouse_admin, signalhouse_user, api, admin, developer, or billing role. May also include cnamAutoApply (bool; turns caller name auto-apply on or off, so eligible numbers get their brand's registered name on outbound calls) and cnamBrandId (string|null; default caller-ID brand for numbers with no campaign, must be a verified brand in this subgroup, required when turning auto-apply on in a subgroup with more than one verified brand). Setting cnamAutoApply/cnamBrandId requires signalhouse_api, signalhouse_admin, signalhouse_user, api, admin, or developer role.
      * @param array $options Additional request options
      * @return array The response from the server
      */

@@ -33,7 +33,9 @@ class Tokens
      * Mint an ephemeral voice token + SIP credentials.
      *
      * Optional: identity (defaults to "anonymous"), ttl (clamped to server max),
-     * grants (capability grants attached to the token).
+     * subgroupId (the subgroup whose inbound calls should ring this identity;
+     * required to receive calls and to register the device for mobile push via
+     * $sdk->voice->pushDevices), grants (capability grants attached to the token).
      *
      * POST /voice/tokens
      */

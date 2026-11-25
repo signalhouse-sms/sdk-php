@@ -13,6 +13,8 @@ use SignalHouse\SDK\Domains\Voice\Analytics;
 use SignalHouse\SDK\Domains\Voice\GlobalVoiceSettings;
 use SignalHouse\SDK\Domains\Voice\Tokens;
 use SignalHouse\SDK\Domains\Voice\CallFlows;
+use SignalHouse\SDK\Domains\Voice\PushCredentials;
+use SignalHouse\SDK\Domains\Voice\PushDevices;
 
 /**
  * Voice domain — wraps the Voice service (mounted under /voice).
@@ -28,6 +30,8 @@ use SignalHouse\SDK\Domains\Voice\CallFlows;
  *  - $sdk->voice->analytics                 — Aggregated call metrics (summary tiles + byDate/byNumber/byCarrier breakdowns)
  *  - $sdk->voice->globalVoiceSettings       — Account-wide voice defaults (accepted regions, max spend, E911)
  *  - $sdk->voice->tokens                    — Mint ephemeral SIP credentials for the browser voice SDK
+ *  - $sdk->voice->pushCredentials           — Mobile push: the Apple/Firebase credentials that wake your app for calls
+ *  - $sdk->voice->pushDevices               — Mobile push: register a device (called by the app with its voice token)
  */
 class Voice
 {
@@ -41,6 +45,8 @@ class Voice
     public GlobalVoiceSettings $globalVoiceSettings;
     public Tokens $tokens;
     public CallFlows $callFlows;
+    public PushCredentials $pushCredentials;
+    public PushDevices $pushDevices;
 
     public function __construct(HttpClient $client, bool $enableAdmin)
     {
@@ -54,5 +60,7 @@ class Voice
         $this->globalVoiceSettings = new GlobalVoiceSettings($client, $enableAdmin);
         $this->tokens = new Tokens($client, $enableAdmin);
         $this->callFlows = new CallFlows($client, $enableAdmin);
+        $this->pushCredentials = new PushCredentials($client, $enableAdmin);
+        $this->pushDevices = new PushDevices($client, $enableAdmin);
     }
 }

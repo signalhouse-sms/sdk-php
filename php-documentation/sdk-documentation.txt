@@ -218,11 +218,18 @@ BRANDS  ($signalHouse->brands)
 --------------------------------------------------------------------------------
   getBrands(array $params = [], array $options = [])
     List brands with filters. $params keys: id, subgroupId, groupId, page,
-    limit, status, registrationType, currentTollFreeCarrier (bool).
+    limit, status, registrationType, currentTollFreeCarrier (bool), search.
     id is a brand lookup id. registrationType filters by "TEN_DLC",
     "TOLL_FREE", or "SHORT_CODE".
     currentTollFreeCarrier: with groupId or subgroupId, true returns only the
     toll-free brands a new toll-free campaign in that group can use.
+    search: a string or an array; an array sends each value as its own
+    search key (?search=apex&search=displayName%3Adental) and every value
+    must match. Free text matches brandId, displayName and companyName; on
+    the staff list (no id, subgroupId or groupId) it matches all eight fields
+    below. "field:term" searches one of brandId, displayName, companyName,
+    ein, email, groupId, subgroupId, referenceId. Each term is 3 to 100
+    characters, at most 5 terms; a shorter term returns 400.
     A toll-free brand's tollFree holds reviewsBusinessOnSubmit: whether the
     brand is reviewed when it's submitted and keeps its business details
     from then on. A brand reviewed on submit also holds businessStructure,
@@ -344,10 +351,14 @@ BRANDS  ($signalHouse->brands)
 
 CAMPAIGNS  ($signalHouse->campaigns)
 --------------------------------------------------------------------------------
-  getCampaigns(?string $id, ?string $brandId, ?string $subgroupId,
-      ?string $groupId, ?int $page, ?int $limit, ?string $status,
-      ?array $options)
-    List campaigns with filters.
+  getCampaigns(array $params = [], array $options = [])
+    List campaigns with filters. $params keys: id, brandId, subgroupId,
+    groupId, page, limit, status, registrationType, search.
+    search: a string or an array; an array sends each value as its own
+    search key and every value must match. Free text matches campaignId, or
+    campaignId and brandId on the staff list (no id, brandId, subgroupId or
+    groupId). "field:term" searches campaignId or brandId. Each term is 3 to
+    100 characters, at most 5 terms; a shorter term returns 400.
 
   createCampaign(array $campaignData, ?array $options)
     Create a new 10DLC campaign.
@@ -506,6 +517,10 @@ MESSAGES  ($signalHouse->messages)
     carrierMicros, rated }] }, which is null when it cannot be computed.
     A settled RCS message also carries carrierFeeMicros, the carrier
     pass-through and media surcharge it was charged.
+    Inbound messages also carry inReplyToMessageId: the message the reply
+    answers, absent when there is none. If that message has a
+    parentMessageId, it was an RCS fallback, and the parent is the RCS
+    message you sent.
 
   getMessageInteractions(string $id, array $options = [])
     GET /message/:id/interactions. The taps on one RCS message, oldest first. Required: id
@@ -579,12 +594,18 @@ NUMBERS  ($signalHouse->numbers)
   getPhoneNumbers(array $params = [], array $options = [])
     List your phone numbers with filters. $params keys: phoneNumber,
     campaignId, registrationId, brandId, subgroupId, groupId, page, limit,
-    currentTollFreeCarrier (bool), released (bool).
+    currentTollFreeCarrier (bool), released (bool), search.
     registrationId: filter to numbers provisioned under this registration.
     currentTollFreeCarrier: with groupId or subgroupId, true returns only the
     toll-free numbers a new toll-free campaign in that group can use.
     released: with subgroupId or groupId, true returns only its released
     numbers (status RELEASED) instead of its active ones.
+    search: a string or an array; an array sends each value as its own
+    search key and every value must match. Free text matches phoneNumber and
+    friendlyName; "field:term" searches one of them. A term that reads as a
+    phone number (digits, spaces, + ( ) . -) matches the number's digits, so
+    "(512) 555" finds 15125550100. Each term is 3 to 100 characters, at most
+    5 terms; a shorter term returns 400.
 
   getNumberHealth(string $phoneNumber, ?array $options)
     Get the health score, the same one the portal shows, (1–10) for an owned phone number.
@@ -676,20 +697,25 @@ SHORTLINKS  ($signalHouse->shortlinks)
 
 SUBGROUPS  ($signalHouse->subgroups)
 --------------------------------------------------------------------------------
-  getSubgroups(?string $id, ?string $groupId, ?int $page, ?int $limit,
-      ?array $options)
-    List subgroups with filters.
+  getSubgroups(array $params = [], array $options = [])
+    List subgroups with filters. $params keys: id, groupId, search, page,
+    limit.
+    search: a string or an array; an array sends each value as its own
+    search key and every value must match. Free text matches subgroupId,
+    subgroupName and subgroupCompanyName; "field:term" searches one of them.
+    Each term is 3 to 100 characters, at most 5 terms; a shorter term returns
+    400.
 
   createSubgroup(array $subgroupData, ?array $options)
     Create a new subgroup.
-    $subgroupData may include optional carrierIdFamily and carrierIdRegion.
-    Setting carrierIdFamily or carrierIdRegion requires signalhouse_api,
+    $subgroupData may include carrierIdFamily and carrierIdRegion. Deprecated: accepted and
+    stored, with no effect on billing. Setting them requires signalhouse_api,
     signalhouse_admin, signalhouse_user, api, admin, developer, or billing role.
 
   updateSubgroup(string $id, array $updateData, ?array $options)
     Update subgroup details.
-    $updateData may include optional carrierIdFamily and carrierIdRegion.
-    Setting carrierIdFamily or carrierIdRegion requires signalhouse_api,
+    $updateData may include carrierIdFamily and carrierIdRegion. Deprecated: accepted and
+    stored, with no effect on billing. Setting them requires signalhouse_api,
     signalhouse_admin, signalhouse_user, api, admin, developer, or billing role.
     $updateData may also include cnamAutoApply (bool) and cnamBrandId (string
     or null) for caller name auto-apply. Setting them requires signalhouse_api,
