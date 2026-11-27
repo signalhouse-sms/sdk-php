@@ -274,6 +274,9 @@ class Campaigns
      * customerCareEmail, optInImageURLs, optional optIns / multiNumberReason / useCases / channels / landingId). phoneNumbers must
      * list 1 up to the brand's tollFree.maxNumbersPerCampaign Toll-Free numbers (at most 5), on the brand's toll-free
      * carrier, or the campaign is refused. They are locked to the campaign once assigned.
+     * privacyPolicyLink is required when the brand's tollFree.requiresPrivacyPolicy is true and neither the brand
+     * nor the referenced Toll-Free landing page (tollFree.landingId) supplies one; termsAndConditionsLink likewise for
+     * tollFree.requiresTermsAndConditions. Precedence: campaign, brand, landing page.
      *
      * @param array $campaignData The toll-free campaign data (see JS SDK CreateTollFreeCampaignData for fields)
      * @param array $options Additional request options
